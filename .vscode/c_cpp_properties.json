@@ -1,0 +1,22 @@
+{
+    "configurations": [
+        {
+            "name": "lit Engine",
+            "includePath": [
+                "${workspaceFolder}/src/**",
+                "${workspaceFolder}/deps/imgui",
+                "${workspaceFolder}/deps/imgui/backends",
+                "${workspaceFolder}/deps/gl3w/include",
+                "${workspaceFolder}/deps/SDL3/include"
+            ],
+            "defines": [
+                "IMGUI_IMPL_OPENGL_LOADER_GL3W"
+            ],
+            "compilerPath": "cl.exe",
+            "cStandard": "c17",
+            "cppStandard": "c++20",
+            "intelliSenseMode": "windows-msvc-x64"
+        }
+    ],
+    "version": 4
+}

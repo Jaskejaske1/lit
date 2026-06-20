@@ -1,0 +1,8 @@
+{
+  "python.analysis.ignore": [
+    "deps/**"
+  ],
+  "python.analysis.exclude": [
+    "deps/**", "**/node_modules", "**/__pycache__", "**/.*"
+  ]
+}

@@ -1,0 +1,28 @@
+# Prerequisites
+*.com
+*.class
+*.dll
+*.exe
+*.o
+*.so
+*.lib
+*.exp
+*.obj
+*.pdb
+*.idb
+
+# ImGui local window layouts
+imgui.ini
+
+# lit Engine Specific
+/build/
+/deps/
+
+# Visual Studio & VS Code Caches
+.vs/
+.vscode/ipch/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.db

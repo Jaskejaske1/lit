@@ -1,0 +1,15 @@
+# Set the default behavior: Auto-normalize line endings
+* text=auto
+
+# Enforce LF for C++ source code
+*.cpp text eol=lf
+*.h text eol=lf
+
+# Enforce CRLF for Windows PowerShell scripts
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+
+# Denote binary files
+*.png binary
+*.dll binary
+*.lib binary
