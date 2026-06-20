@@ -1,0 +1,131 @@
+lit - Roadmap
+=============
+
+Hard constraints that apply to every phase:
+- Zero-latency live tweaks — any parameter change must reach the math with zero perceptible delay
+- Native processing speed — no interpreted layers, no shader recompilation on parameter change, no GC pauses, no allocation on the hot path
+- Parameter values live in shared memory / uniform buffers accessible to both CPU and GPU; CPU writes, GPU reads next frame
+- This shapes every architectural choice. If a feature can't be made zero-latency, it doesn't belong in the live path.
+
+Bake constraint (settled):
+- Topology is baked at build-time. Runtime only varies parameters.
+- Build-time can be slow (compilation takes seconds to minutes). Live-time is just uniform writes.
+- Topology mutation never happens live. The substrate compiles a node graph into a runtime artifact once; that artifact runs unchanged during performance.
+- Mirrors VST plugins, GPU shaders, FPGA synthesis.
+- Note: bake is a spectrum, not binary. Start interpreted (simplest), measure, add bake only as much as needed.
+
+Program split (architecture, three binaries):
+- The system is four things (three binaries + external):
+  1. **Builder** — substrate editor + visual field preview. Dev-only. Compiles and bakes Intentions.
+  2. **Operation** — runtime Intentions + busking surface + MIDI/OSC + DMX output. Lives at the show. Lean.
+  3. **Visualizer** — spatial field preview + receives baked shaders from Builder. Runs on beefy hardware with a real GPU.
+  4. **(External) Capture** — real fixture viz, GDTF-based. Used as-is.
+- All communicate over OSC (standard show-control protocol).
+- Three binaries = maximum flexibility. Each deploys independently based on the show's needs.
+
+Compute target (revised — CPU is default):
+- CPU evaluation is the DEFAULT. MA2 onPC does 4-8 universes of pixel mapping on a single CPU core with limited RAM. Same workload class.
+- GPU compute is OPTIONAL for scale: pixel walls, 3D lighting rigs with hundreds of fixtures, complex spatial math.
+- Operation PC: a recent i3 + 16GB RAM is enough for typical busking shows. No discrete GPU required for most cases.
+- The substrate runs interpreted (CPU) or compiled (GPU). Per-Intention decision based on graph size.
+- This means most shows run on CPU only. Big shows get the GPU acceleration.
+
+Bake when it matters (scale-dependent, revised):
+- Small rigs: interpreted evaluation, no bake needed.
+- Large rigs (pixel walls, 3D lighting rigs with hundreds of fixtures): bake starts to matter.
+- Per-Intention decision, not all-or-nothing.
+- Pixel walls and 3D lighting rigs (3D sphere or cube) are the trigger cases for full bake.
+
+This is the build order for the system. Each phase ends in something you can actually use, not just code that compiles.
+
+Each phase should also mark which program(s) it touches (Builder, Operation, Visualizer).
+
+Phase 0 - Validate the toolchain (DONE)
+- Status: complete
+- What got built: GPU compute → SSBO → CPU readback → ImGui visualization loop
+- What it proves: the foundation works (window, GL context, GPU math, data roundtrip, viz)
+- What it ISN'T: the system. It's a testing base layer.
+- Note: hardcoded math, single effect, no node graph, no library, no surface, no 3D
+
+Phase 1 - Real substrate skeleton
+- Exit criterion: one real effect built inside the substrate, baked into a module, running at zero-latency, visible in 3D
+- What gets built:
+  - Real node graph (not hardcoded): Generators (LFO, noise, time, audio FFT later), Modifiers (multiply, clamp, lag, math), Outputs (compute target)
+  - Subpatches: nodes that wrap other nodes
+  - Bake step: graph → optimized runtime form (one of: compiled GLSL compute shader, pre-allocated runtime struct, native C++ function — TBD)
+  - Live data flow visible in the graph itself during build (wires show actual values, not just connections)
+  - Visual field preview (Phase 3 work pulled forward, since you need it to see anything spatial)
+- Bake constraint applies: topology fixed at build-time, runtime only varies parameters
+- Test case: the diagonal pixel bars red sweep + tilt sweep effect, built inside the substrate, baked, running
+- This is the biggest single phase. Substrate + visual field preview + bake is most of the project.
+
+Phase 2 - Packaging (substrate module → Intention)
+- Exit criterion: one Intention saved, loaded, exposed parameters working
+- What gets built:
+  - Save a node graph as an Intention with metadata (name, tags, exposed parameters)
+  - Load an Intention back into a fresh substrate context
+  - Expose specific parameters from inside the node graph to the outside world
+  - Persistence format (human-readable: JSON or similar)
+- This is what makes "your own library" possible
+
+Phase 3 - Surface
+- Exit criterion: busking layout running with at least 3 Intentions from your library
+- What gets built:
+  - MA2 layout view / Wolfmix-style pages of executors
+  - Each executor bound to an Intention from your personal library
+  - Live parameter tweaking via the surface
+  - Escape hatch: one keystroke to crack an executor open into its substrate
+  - Library browser (search, tags, categories)
+- Familiar to operators. The feel is: pick an Intention, drop it on an executor, tweak the knobs, react to the band
+
+Phase 4 - Real fixture visualizer
+- Exit criterion: GDTF fixture loaded, driven by substrate output, looks right
+- What gets built:
+  - Load GDTF fixture files
+  - Render real fixture models in a 3D scene
+  - Substrate output (the same data the visual field preview shows) drives the real fixtures
+  - Confirms: "what the field preview showed is what this looks like on actual lights"
+
+Phase 5 - DMX/Art-Net/sACN output
+- Exit criterion: real physical fixtures respond to substrate output
+- What gets built:
+  - Industry-standard protocol output
+  - Fixture profile mapping (the bridge from "generic channel values" to "DMX bytes on the wire")
+  - This is the last piece between the substrate and real lights
+- Once this works, the system is end-to-end live with real fixtures
+
+Phase 6 - Polish (backlog, populated by use)
+- Library management at scale (months of building, search, tags, favorites)
+- MIDI / OSC / audio FFT input
+- Fixture profile editor (if GDTF coverage isn't enough)
+- Surface customization per show (Christian-Jackson-level layout view editing)
+- Whatever else surfaces from actually using the system
+
+Open questions blocking Phase 1:
+- Intention data model — what does a packaged substrate module look like on disk?
+- Node graph serialization format
+- Node visual representation (icon, color, parameters inline?)
+- How does the visual field preview know which axes / scale to show?
+- What's the minimum viable node set to build the test case effect?
+
+What we know we can build on:
+- SDL3 + ImGui + GL3W + OpenGL 4.6 toolchain (validated)
+- Modular Node base class (Initialize / Process / DrawUI)
+- Generic FixtureData struct (x, y, channels[6]) — needs extension to 3D, per-pixel, real fixture types
+
+What we know we don't have yet:
+- Node graph editor (visual wiring of nodes)
+- Subpatch mechanism
+- Any persistence layer
+- 3D visualizer
+- Real fixture data / GDTF parsing
+- Surface / busking layout
+- DMX / Art-Net / sACN output
+
+What "done" looks like at each phase:
+- P1: you can sit down at home and BUILD a new effect visually, see it in 3D space
+- P2: that effect is saved and reloadable, with knobs you expose
+- P3: you can take your saved effects and busk with them live
+- P4: you can see exactly what the effects will look like on real fixtures before the show
+- P5: real physical lights move
+- P6: the system feels like yours, not like a tool you tolerate

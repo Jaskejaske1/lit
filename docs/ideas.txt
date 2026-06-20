@@ -1,0 +1,314 @@
+lit - Ideas
+===========
+
+The problem is the translation tax between creative impulse and physical light
+The opportunity is programming by intention on a spatial model, not by fixture ID on a channel model
+The dual-state is the architecture: Surface = declarative Intentions, Substrate = procedural node graph, Escape Hatch = one keystroke cracks it open (Ableton + Max-for-Live model)
+4D space (X, Y, Z + T), spatial bounding masks instead of groups, mathematical compositing instead of HTP/LTP
+
+The system is four layers, each its own thing, each its own build:
+
+1. Substrate
+- Deep procedural node graph where effects are BUILT
+- TouchDesigner / Blender / Max/MSP-like
+- Subpatches: nodes that wrap other nodes
+- Live data flow visible inside the graph (wires carry the actual values, not just static connections)
+- Not visible during live performance — sits underneath
+
+2. Surface
+- Busking layer where effects are USED
+- Christian Jackson MA2 layout views, or Wolfmix-style — but powered by your own substrate modules
+- Familiar layout to operators (pages of executors, parameter knobs)
+- Each executor = an Intention from your personal library
+- The escape hatch lives here: one keystroke cracks an executor open into its underlying substrate for live rewiring
+
+3. Visual field preview
+- 3D previz of the spatial math BEFORE it hits fixtures
+- Shows the field, not fixtures — volumes, vectors, scalars depending on what the math is doing
+- Where you SEE what the substrate math actually does in space
+- Per-fixture sample points toggleable on top
+
+4. Real fixture visualizer
+- Capture-like, GDTF-based
+- Real fixture models in a 3D scene
+- Confirms: "what you saw in the field preview is what this looks like on the actual fixtures"
+
+Build order:
+- Substrate first (everything else depends on it having real math to render)
+- Surface second (needs substrate modules to wrap)
+- Visual field preview third (so you can see what the substrate actually does during build)
+- Real fixture visualizer last (final-stage confidence check, right before going to live DMX)
+
+Split between contexts:
+- AT HOME (build): substrate + visual field preview open. You build effects, see them in 3D, package them as modules.
+- LIVE (use): surface open. You reach into your library, deploy effects, tweak by feel.
+- The visual field preview and real fixture visualizer are optional on stage — useful for confidence, not required for busking.
+
+What each inspiration actually gives us (and what it doesn't):
+- Wolfmix W1 → tactile FX engines (color/move/beam separated), busking-first feeling. Limited customization, doesn't scale to big rigs.
+- Max/MSP → deep patching power. Audio-rate, generic, set-and-let-run. Not live-performance oriented — bad fit for festivals.
+- TouchDesigner → spatial math over 3D canvas, GPU-accelerated. Imperative visual programming, kills live flow.
+- Ableton + Max4Live → the build/use split (device surface, deep patch underneath). The INTERACTION MODEL we want.
+- MA2 / ChamSys → industry output (DMX/Art-Net/sACN), fixture profiles. NOT the workflow.
+- Christian Jackson MA2 layout views → the visual language of how operators actually structure their live surface.
+- Chataigne → data routing between protocols (OSC, MIDI, DMX, ArtNet).
+- OSCPilot → brutalist touch-first UI, fast response, zero internal logic.
+- Capture → GDTF-based real fixture rendering. The reference for the real visualizer.
+
+Open questions:
+- Intention data model: what does a packaged substrate module actually look like on disk? State I/O, parameters, subpatch references, metadata
+- Substrate → surface communication: events, polling, shared memory?
+- Node graph serialization format
+- Visual representation of nodes (icon, color, parameters visible inline?)
+- How does the visual field preview know which axes/scale to show?
+- Does the real fixture visualizer run on the same machine as the substrate, or separate?
+- What's the minimum GDTF subset to make the real visualizer actually useful?
+- What's the surface layout when you have 6 months of personal library — how do you find things?
+
+Personal motivation (don't lose this):
+- The kid who used to think in lightshows in his head is still there
+- The programmer is the tool that has to build the door
+- This is research. No deadlines. No customers. Just untangling an idea that nobody else has built
+
+About the existing C++ in /src and /build:
+- That's a testing base layer, not the system. It validates one thing: GPU compute → SSBO → CPU readback → visualization works
+- The substrate will replace the hardcoded math with a real node graph
+- Toolchain (SDL3 + ImGui + GL3W + OpenGL 4.6) is validated
+- Abstract Node base class (Initialize/Process/DrawUI) is the seed
+- Generic FixtureData (x, y, channels[6]) is the seed — but only 2D, no real fixture types, no per-pixel
+
+Hard constraints (shape every phase, not negotiable):
+- Live tweaks of node inputs and combinations must be ZERO-LATENCY
+- Native processing speed — no interpreted layers, no recompile-on-tweak, no GC pauses, no shader rebuilds on parameter change
+- What this rules out: any approach where a parameter change requires compilation, allocation, or synchronization on the hot path
+- What this requires: parameters in shared memory / uniform buffers accessible to both CPU and GPU; CPU writes values, GPU reads next frame, no perceptible delay between operator input and math update
+- This is achievable — game engines do this all the time (data-oriented design, uniform buffers, per-frame update) — but it must be designed in from the start, not retrofitted
+
+Working live inside nodes — RESOLVED:
+- Flavor B (hot-rewire) is excluded by design. Topology never mutates live.
+- Flavor A (hot-tweak) is the only live form of "inside nodes". Parameter values change, structure stays fixed.
+- The Escape Hatch during a show = unambiguously Flavor A.
+- Build-time is where any wiring/rearranging happens. Live-time is purely parameter tweaking.
+
+Bake constraint (architectural hardening, settled):
+- Topology is NEVER mutated live. Only parameter values change during performance.
+- Why: this lets the substrate compile/bake node graphs into optimized runtime forms that run at native speed
+- Implication: build-time can be slow (compilation allowed, takes seconds to minutes), live-time is zero-latency (just uniform writes)
+- Effect on the model: simpler, faster, harder to break. No concurrent graph mutation, no inconsistent topology states, no need to think about runtime graph versioning
+- Mirrors VST plugin architecture, GPU shader compilation, FPGA synthesis — fixed topology, varying parameters
+- IMPORTANT: bake is a SPECTRUM, not binary. You can bake partially:
+  - Cache the compiled GLSL shader instead of recompiling
+  - Pre-allocate fixed-size buffers
+  - Pre-compute static parts of the math
+  - Full graph fusion into one optimized runtime (the heavy version)
+- Pragmatic approach: start interpreted (simplest substrate), measure, bake only as much as needed
+- Whether bake is needed depends on graph size and complexity. Small graphs may not need it at all.
+
+Program architecture (three separate binaries):
+- The system is three executables, not one app:
+  1. **Builder** — substrate editor + visual field preview. Dev-only. Compiles and bakes Intentions at build time.
+  2. **Operation** — runtime Intentions + busking surface + MIDI/OSC + DMX/Art-Net/sACN output. Lives at the show. Lean by design (no editing features, no heavy viz).
+  3. **Visualizer** — spatial field preview + receives baked shaders from Builder. Runs on beefy hardware with a real GPU. Optional during live.
+  4. **(External) Capture** — real fixture viz, GDTF-based. Used as-is, not built by us.
+- All four communicate over OSC (Open Sound Control). Standard in lighting + media worlds.
+- The shader files (compiled compute shaders for spatial math) live on the Visualizer machine. Builder compiles them at bake time, transfers to Visualizer.
+- Three binaries = maximum flexibility. Each can be deployed independently based on the show's needs.
+
+Compute target (CPU default, GPU optional):
+- CPU evaluation is the DEFAULT. Modern multi-core CPUs handle spatial math over hundreds of fixtures easily.
+- Reference: MA2 onPC does 4-8 universes of pixel mapping on a single CPU core with limited RAM. Same workload class as what Operation PC needs to do.
+- GPU compute is an OPTION for scale: pixel walls, 3D lighting rigs with hundreds of fixtures, complex spatial math over many positions. Those benefit from GPU parallelism.
+- Operation PC scales with the show, not fixed-cost. A recent i3 + 16GB RAM is enough for typical busking shows. Pixel walls and 3D rigs are the trigger cases for needing GPU.
+- The substrate can run interpreted (CPU) or compiled (GPU). Per-Intention decision based on graph size and complexity.
+- This simplifies the architecture: most shows run on CPU only. No discrete GPU required.
+
+Modularity of a baked Intention:
+- A compiled shader per Intention absolutely accepts multiple inputs and changes live
+- Modularity doesn't disappear — it moves from "graph structure" (baked) to "named parameter slots" (live)
+- Each parameter slot is a live-tweakable input
+- Think VST plugin: the synth is compiled, the knobs are live
+- Nothing is lost compared to a fully editable graph. Just a different boundary.
+
+Bake when it matters (scale-dependent):
+- Small rigs (a handful of fixtures, simple math): interpreted evaluation, no bake needed
+- Large rigs (pixel walls, 3D lighting rigs with hundreds of fixtures, complex spatial math): bake starts to matter
+- The substrate can decide per-Intention whether to bake or interpret — flexible, not all-or-nothing
+- Pixel walls and 3D lighting rigs (like a 3D sphere or cube) are the trigger cases for full bake
+
+Time signal Generators (live data inputs):
+- **BPM tap** (pedal hardware) — beat clock + tempo. Default for music-driven effects.
+- **Kick-in mic** (audio-reactive) — transient trigger when low frequencies spike.
+- **LTC timecode** — absolute time. Rare for the user, mentioned for completeness.
+- All three are node Generators. Different shape of time signal, different effect type.
+- User confirmed: rarely uses timecode, BPM tap is the default
+
+Continuous math + operator nudges (escaping the cue-list trap):
+- The substrate runs continuous math. The sweep is always running, looping based on BPM.
+- The operator doesn't TRIGGER the sweep — they shape its parameters live: intensity, speed, color, tilt range.
+- Discrete cues vs continuous parameters. The substrate gives you continuous, the operator shapes continuously, no GO button.
+- This is how you get reactivity to song structure without scripting it.
+
+Decay node primitive (the math behind fade trails):
+- Exponential decay: `I(x, t) = exp(-dt / tau)` where dt is time since the sweep was at position x, tau is the time constant
+- One node primitive, multiple behaviors: pulse with trail, long persistence (phosphor effect), echo (output fed back to its own input at delay)
+- User's "delay of parameters" intuition was right — exponential decay is exactly that
+
+Test case: diagonal pixel bars red sweep + tilt sweep (the forcing function for substrate design)
+- Rig: diagonal pixel bars, suspended (hanging) in the middle of the stage. Default state: white (full intensity, white color). Symmetrical left and right.
+- Effect: red color sweep moves from bottom to top of each bar with fade trail. Tilt sweeps simultaneously (coupled with the color sweep).
+- Symmetry: confirmed option (a) — bars are symmetric, sweep is mirrored on each half. The sweep intensity function is symmetric: `f(x) = f(-x)`.
+- Tempo: sweep loops based on BPM (live tempo from a BPM tap pedal).
+- Composition: at each fixture, color = lerp(white, red, sweep_intensity). When sweep is far, fixture is white. When sweep passes through, fixture shifts to red. Same pattern for tilt.
+- Coupling: same sweep position drives both color and tilt (possibly with a time offset for a layered wave feel).
+
+Starter node primitive set for the test case (~7 nodes):
+- **Generators:** BPM Tap, Phase, Ramp
+- **Modifiers:** Decay, MIX, Time Offset
+- **Spatial:** Spatial Mirror (applies symmetric position function — sweep is mirrored on each half)
+- **Output:** Spatial Fixture Driver (drives fixture channels at each fixture's XYZ)
+
+Nested Intentions (subpatch mechanism):
+- An Intention can be used as a node type inside another Intention's graph
+- Its exposed parameters become inputs to that node instance
+- The substrate treats the nested Intention as a single composite node (internal graph hidden by default)
+- Escape Hatch reveals the nested Intention's full graph for live rewiring
+- This is how the library compounds: small reusable Intentions ("red pulse") combine into bigger ones ("diagonal bars sweep")
+- Without nesting, every effect has to be built from raw nodes; with it, you build small reusable pieces and combine
+- Performance: bake at the Intention boundary. Once baked, a nested Intention is no longer nested at runtime — it's just part of the compiled artifact. Zero nesting cost at runtime. Live evaluation cost only applies if nested Intentions stay interpreted.
+
+Node type system:
+- Flat registry of node types, NOT class inheritance
+- Each type is a self-contained definition: type name + input schema + output schema + parameters + math
+- No "extends BPM Tap." Variants are new types.
+- Mirrors TouchDesigner's OP system — each operator is a flat definition
+- Adding new node types stays trivial (define a new entry in the registry)
+- Inheritance is rejected because it creates rigid hierarchies that fight against the data-driven model
+- **Type vs Name distinction:**
+  - **Type** = classification in the registry. E.g., "BPM Tap", "Phase", "Decay". All BPM Tap nodes share this same Type.
+  - **Name** = instance label. "My BPM Tap #1", "Slow BPM Tap", "Phase A". One Type can have many instances, each with its own Name.
+  - Type tells you what kind of math runs. Name tells you which specific node in your graph this is.
+
+Sockets and parameters are unified:
+- A Socket IS the parameter
+- Input Socket: name + data type + default value (when disconnected) + optional connection (when connected)
+- Output Socket: name + data type + value produced by the node each frame
+- UI: input sockets show inline editable value when disconnected, show connected source value when connected. Output sockets show produced value (for debugging).
+- One concept, two roles based on which side of the node they're on
+- **Show inline always**: both inputs and outputs display their current value at all times. The user sees what's actually flowing through the graph.
+
+Connection model (cleaner):
+- Connection is a SEPARATE OBJECT in the Graph, NOT a field on Socket
+- A Connection has: source Output Socket ID + destination Input Socket ID
+- Socket just has its current value, no Connection field
+- This separates concerns: Socket = data, Connection = wiring
+
+**Connection data conversion rules (explicit, not silent):**
+- Connection is pure transport. No silent conversion.
+- Allowed implicit conversions:
+  - Same type → pass through unchanged
+  - int → float → implicit (lossless, every int fits in float)
+- Forbidden implicit conversions (require explicit operator):
+  - float → int → requires Round / Floor / Ceil / Clamp operator
+  - Vector3 → Color → requires explicit construction
+  - Color → Vector3 → requires explicit extraction (but possibly implicit if just reading channels)
+- Full table documented in the engine. Errors are explicit and named.
+
+Clone-and-modify UX (how the library grows):
+- Right-click any Intention in the library → Clone
+- It appears as a new editable copy
+- Crack it open (Escape Hatch) → modify the underlying graph
+- Save as new Intention
+- This is a primary way the library compounds over time
+
+Presets (third layer above Type and Name):
+- **Type** = classification (BPM Tap, Phase, Decay)
+- **Name** = instance label ("My BPM Tap #1")
+- **Preset** = pre-configured variant of a Type with default parameter values
+- Take a Type, configure its parameters, save as Preset
+- Presets are the Surface's entry point: pick a Preset, drop it, modify live, save as new Preset
+- Bridges substrate (where Types live) and surface (where Presets get used)
+- This is the third layer that makes the system compositional: you build Types once, save many Presets, use the Presets live
+
+State (per-node runtime memory):
+- Some Nodes need to remember things between frames (LFO needs current phase, Decay needs previous output)
+- State is `{ name: value, ... }` — a dict of named fields
+- Type declares what state keys it needs (in its registry definition)
+- Node holds the actual values per key (per-instance state)
+- Examples:
+  - LFO state: `{ "phase": 0.5 }`
+  - Decay state: `{ "prev_value": 0.7 }`
+- Generic mechanism. Types fill in their own state shape.
+
+Bypass flag (per Node):
+- Useful for: A/B testing two paths, temporarily muting a part of the graph during debugging, muting parts of a graph during live tweaking
+- Visual indicator on the node (small dot or icon)
+- Toggle in the inspector panel
+- Same concept as bypass in audio effects
+
+Data model: Streams + Bangs (Max/MSP-style, not semantic types):
+- Two fundamental data concepts, no more:
+  - **Stream** — continuous data flow at some rate
+  - **Bang** — discrete event (no value, just "something happened")
+- Streams carry **structured values**. The structure is the only type:
+  - **Scalar** — 1 numeric value (period, tau, dimmer, tilt)
+  - **Vector2** — 2 numeric values (pan+tilt, X+Y)
+  - **Vector3** — 3 numeric values (color HSL = H+S+L, position XYZ, RGB)
+  - **Vector4** — 4 numeric values (RGBA, RGBW)
+  - (Future) **AudioBuffer** — many values
+- Color is a Vector3 (HSL). Position is a Vector3 (XYZ). They're not types — they're CONVENTIONS. Same structure, different interpretation by the consuming node.
+- Earlier attempts at semantic types ("Pulse", "Color", "Pose") were too vague. The structural approach is stricter and matches Max/MSP mental model.
+
+Stream rates:
+- **Frame-rate** (default): updates every frame (~60Hz). The math result.
+- **Event-rate**: updates only when value changes. For slow-changing data.
+
+Bangs:
+- Discrete events with no value
+- Fire-and-forget
+- Used for triggers (beat, button press, threshold crossed)
+
+Connection rules (Max/MSP-style, loose):
+- Same structure → connect (pass through)
+- Different structure → conversion needed (explicit operator or auto-fill)
+- Stream → Bang: threshold detector (value crosses X, fires bang)
+- Bang → Stream: trigger (e.g., sets value to 1)
+- Math nodes decide what to do with values. The type is structural, not semantic.
+
+Color workspace (HSL, recommended for color streams):
+- Color is a Vector3 (H, S, L) — engine convention
+- Why HSL over HSV / HSI / others:
+  - MA uses HSL (familiar to LDs working on MA consoles)
+  - HSL has natural place for white at top (L=1), black at bottom (L=0), pure colors at middle (L=0.5)
+  - More intuitive for "how bright" in lighting (Lightness IS the brightness axis, unlike HSV's Value which is max-of-RGB)
+  - ChamSys has HSL wheel as a color model
+  - If we need other models later (HSV, OKLab, etc.), we can layer them on
+- Future consideration (not v0): CIE 1931, CCT (correlated color temperature) for pro color science
+- Fixture-profile mapping per fixture type (handles white channel and other variations):
+  - RGB: standard HSL→RGB math
+  - RGBW: low saturation → white channel wins. High saturation → RGB channels only.
+  - CMY: inversion math
+  - No white channel: profile knows, ignores W
+- This solves the white-channel-ignored problem at the engine level, not the fixture level
+
+Editor UI design (substrate's visual editor):
+- **Drag-drop positioning** (user controls where each Node goes in the canvas)
+- **Snap-to-grid** for node position, toggleable on/off (tidy layouts vs freeform)
+- **Keyboard shortcut + search box** to insert Nodes (like DaVinci Resolve Fusion's node editor)
+- **Inspector panel** for the selected Node — lists details, allows editing of parameters, comments, bypass
+- **Cable organizer** (auto-routes connections as bezier curves to avoid overlap, like Max/MSP) — note: this is for CONNECTIONS, not nodes. Auto-organizing node positions is NOT in scope; the user drags nodes manually.
+- **Cable-snap feedback**: when dragging a cable near a compatible socket, it highlights + snaps. Standard TouchDesigner/Blender UX.
+- **Visual node design**: shows Name + Type icon + Input sockets (with names and data type indicators) + Output sockets (with names). Compact, brutalist, data-dense.
+- Reference points: DaVinci Resolve Fusion, Max/MSP, TouchDesigner, Blender
+- Implementation: custom ImGui-based node editor. Build it ourselves, no external library (imnodes.NET taught us the lesson). ImGui's immediate-mode drawing primitives give us full control over snap feedback, inspector, cable routing, etc.
+- This is UI/UX design, not data model — kept in ideas.txt, not data-model.txt
+
+Node data model (correcting the common misconception):
+- Nodes are NOT "no-code programming"
+- Nodes are DATA. The visual graph is a representation of data, not a different paradigm from code
+- A node has:
+  - Inline parameter values — literal numbers, colors, fixed settings (pan range, color, period, etc.)
+  - OR input sockets — receive values from other nodes' outputs
+  - Output sockets — feed values to other nodes' inputs
+- A parameter is EITHER a constant OR a connection, not both at once
+- Visual reference: Blender nodes, TouchDesigner nodes, Unreal Engine Blueprints
+- Inline + input is the standard data-flow pattern: literal value when disconnected, live value when connected
