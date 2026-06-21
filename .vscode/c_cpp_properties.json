@@ -1,14 +1,25 @@
 {
     "configurations": [
         {
-            "name": "lit Engine",
+            "name": "lit Engine (Windows MSVC x64)",
+            "configurationProvider": "ms-vscode.cmake-tools",
             "includePath": [
                 "${workspaceFolder}/src/**",
-                "${workspaceFolder}/deps/imgui",
-                "${workspaceFolder}/deps/imgui/backends",
-                "${workspaceFolder}/deps/gl3w/include",
-                "${workspaceFolder}/deps/SDL3/include"
+                "${workspaceFolder}/cmake-build/_deps/sdl3-src/include",
+                "${workspaceFolder}/cmake-build/_deps/imgui-src",
+                "${workspaceFolder}/cmake-build/_deps/imgui-src/backends",
+                "${workspaceFolder}/cmake-build/_deps/gl3w-build/include"
             ],
+            "browse": {
+                "path": [
+                    "${workspaceFolder}/src/**",
+                    "${workspaceFolder}/cmake-build/_deps/sdl3-src/include",
+                    "${workspaceFolder}/cmake-build/_deps/imgui-src",
+                    "${workspaceFolder}/cmake-build/_deps/imgui-src/backends",
+                    "${workspaceFolder}/cmake-build/_deps/gl3w-build/include"
+                ],
+                "limitSymbolsToIncludedHeaders": true
+            },
             "defines": [
                 "IMGUI_IMPL_OPENGL_LOADER_GL3W"
             ],
