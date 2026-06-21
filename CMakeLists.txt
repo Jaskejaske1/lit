@@ -1,13 +1,8 @@
 # lit — substrate-driven lighting engine
 #
-# Architecture: library first.
-#   - substrate (STATIC library): the engine core. Holds Engine + node types.
-#     This will grow into the real substrate (node graph, math, fixtures, viz).
-#   - lit (EXECUTABLE): the current prototype binary. Will be replaced by
-#     Builder / Operation / Visualizer in later phases.
-#
-# All dependencies fetched via CMake FetchContent (no vendored deps, no init script).
-# Build system: CMake 3.20+.
+# Architecture: library first (substrate + thin binaries).
+# Build system: CMake 3.20+ with FetchContent for all deps.
+# Source files: src/ (substrate code lives here when added in Phase 1+).
 
 cmake_minimum_required(VERSION 3.20)
 project(lit
@@ -55,8 +50,6 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(SDL3)
 
 # --- GL3W ---
-# GL3W's CMakeLists creates an INTERFACE library "gl3w" (include dirs only)
-# and generates gl3w.c at configure time. We just compile that generated source.
 FetchContent_Declare(
     gl3w
     GIT_REPOSITORY https://github.com/skaslev/gl3w.git
@@ -77,7 +70,6 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(imgui)
 
-# ImGui doesn't ship a CMakeLists that builds the library; build the parts we use.
 add_library(imgui STATIC
     ${imgui_SOURCE_DIR}/imgui.cpp
     ${imgui_SOURCE_DIR}/imgui_draw.cpp
@@ -94,42 +86,6 @@ target_compile_definitions(imgui PUBLIC IMGUI_IMPL_OPENGL_LOADER_GL3W)
 target_link_libraries(imgui PUBLIC gl3w_loader SDL3::SDL3)
 
 # ============================================================================
-# substrate library (architecture: library first, three thin binaries link it)
-# ============================================================================
-add_library(substrate STATIC
-    src/Engine.cpp
-    src/Nodes/ComputeNode.cpp
-    src/Nodes/VisualizerNode.cpp
-)
-target_include_directories(substrate PUBLIC src)
-target_link_libraries(substrate PUBLIC imgui gl3w_loader SDL3::SDL3)
-
-# ============================================================================
-# Executable: lit
-# ============================================================================
-add_executable(lit src/main.cpp)
-target_link_libraries(lit PRIVATE substrate)
-
-# ============================================================================
-# Compiler flags
-# ============================================================================
-if(MSVC)
-    target_compile_options(substrate PRIVATE /W3 /utf-8 /EHsc)
-    target_compile_options(lit       PRIVATE /W3 /utf-8 /EHsc)
-    if(LIT_WARNINGS_AS_ERRORS)
-        target_compile_options(substrate PRIVATE /WX)
-        target_compile_options(lit       PRIVATE /WX)
-    endif()
-else()
-    target_compile_options(substrate PRIVATE -Wall -Wextra)
-    target_compile_options(lit       PRIVATE -Wall -Wextra)
-    if(LIT_WARNINGS_AS_ERRORS)
-        target_compile_options(substrate PRIVATE -Werror)
-        target_compile_options(lit       PRIVATE -Werror)
-    endif()
-endif()
-
-# ============================================================================
 # Summary
 # ============================================================================
 message(STATUS "")
@@ -139,4 +95,5 @@ message(STATUS "  Generator:       ${CMAKE_GENERATOR}")
 message(STATUS "  Platform:        ${CMAKE_GENERATOR_PLATFORM}")
 message(STATUS "  Output (exec):   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
 message(STATUS "  Output (libs):   ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}")
+message(STATUS "  Substrate:       (empty — Phase 1+ code goes in src/)")
 message(STATUS "")

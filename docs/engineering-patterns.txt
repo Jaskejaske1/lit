@@ -1,0 +1,149 @@
+lit - Engineering Patterns
+==========================
+
+Performance engineering insights captured from the Phase 0 prototype before it was deleted.
+Reference these when building real substrate code, especially anything GPU-adjacent.
+
+These are **HOW patterns**, not **WHAT patterns**.
+- WHAT (data structures) → data-model.txt
+- WHY (design decisions) → ideas.txt
+- WHEN (phase plan) → roadmap.txt
+- HOW (engineering patterns like this) → engineering-patterns.txt
+
+------------------------------------------------------------------------
+GPU preference hints (hybrid laptops)
+------------------------------------------------------------------------
+NVIDIA Optimus + AMD PowerXpress force the discrete GPU on hybrid laptops.
+Without these, lighting apps can silently run on the integrated GPU and tank performance.
+
+```cpp
+#ifdef _WIN32
+#include <windows.h>
+extern "C"
+{
+    __declspec(dllexport) DWORD NvOptimusEnablement = 1;
+    __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
+}
+#endif
+```
+
+These are **linker-level** hints — they must live in the executable itself, not
+a static library. Put them in main.cpp (the binary entry point).
+
+------------------------------------------------------------------------
+OpenGL context setup with SDL3
+------------------------------------------------------------------------
+Validated configuration from Phase 0:
+- Profile: **CORE** (no legacy/compat)
+- Version: **4.6** (compute shaders, SSBO, indirect draw all available)
+- VSync: **ON** (`SDL_GL_SetSwapInterval(1)`)
+
+```cpp
+SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
+SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 6);
+// ... SDL_CreateWindow with SDL_WINDOW_OPENGL flag ...
+SDL_GL_SetSwapInterval(1); // VSync
+```
+
+Why 4.6: needed for compute shaders (4.3+) and SSBO (4.3+). 4.6 is the latest
+broadly-supported desktop version. Avoids extension soup.
+
+------------------------------------------------------------------------
+GPU compute → SSBO → CPU readback pipeline (the hot loop)
+------------------------------------------------------------------------
+The validated pipeline for fixture math on the GPU:
+
+1. **GLSL compute shader** with `layout(local_size_x = 256) in;`
+2. **SSBO** with `layout(std430, binding = 0) buffer`, struct 32-byte aligned
+3. **Update uniforms** each frame (time, parameter changes)
+4. **Dispatch**: `glDispatchCompute(num_workgroups, 1, 1)`
+5. **Memory barrier**: `glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT)` — MANDATORY
+6. **Map for read**: `glMapBufferRange(..., GL_MAP_READ_BIT)`
+7. **memcpy** to CPU-side data
+8. **Unmap**: `glUnmapBuffer(GL_SHADER_STORAGE_BUFFER)`
+
+**Critical**: never read SSBO without the memory barrier in step 5. Race condition.
+
+Pattern is a baseline. The real substrate (Phase 1+) will likely evolve this:
+- Bake step may compile multiple node graphs into one optimized compute shader
+- Per-Intention SSBO layout based on what that Intention produces
+- Streaming readback for large fixture counts (avoid full-buffer memcpy)
+
+------------------------------------------------------------------------
+FixtureData struct layout (std430 SSBO requirement)
+------------------------------------------------------------------------
+The substrate's fixture representation must be **32-byte aligned** to match
+std430 layout in the GLSL compute shader:
+
+```cpp
+struct alignas(32) FixtureData
+{
+    float x, y;          // 2D position (will extend to 3D + per-pixel)
+    float channels[6];   // [0]=Dimmer, [1]=R, [2]=G, [3]=B, [4]=Pan, [5]=Tilt
+};
+// Total: 32 bytes (8 + 24)
+```
+
+Future extensions (per data-model.txt Spatial Operator + Fixture):
+- **3D position** (x, y, z) → would change total size; keep 32-byte multiple
+- **Per-pixel fixtures** (multiple FixtureData per fixture, indexed) → bigger struct or stride
+- **Real fixture types** (per FixtureData GDTF traits) → much bigger struct
+
+**When extending**: keep total size a multiple of 32 bytes for std430 alignment.
+GLSL std430 layout rules: https://www.khronos.org/opengl/wiki/Interface_Block_(GLSL)#Memory_layout
+
+------------------------------------------------------------------------
+ImGui fixture-grid visualization pattern
+------------------------------------------------------------------------
+For showing the fixture grid in 2D (will be replaced by 3D scene in Phase 1+):
+
+```cpp
+ImDrawList* drawList = ImGui::GetWindowDrawList();
+ImVec2 origin = ImGui::GetCursorScreenPos();
+float rectSize = 30.0f;
+float padding = 5.0f;
+
+for (int i = 0; i < fixtures.size(); i++)
+{
+    int gridX = i % gridSize;
+    int gridY = i / gridSize;
+    ImVec2 pos1 = ImVec2(origin.x + gridX * (rectSize + padding),
+                         origin.y + gridY * (rectSize + padding));
+    ImVec2 pos2 = ImVec2(pos1.x + rectSize, pos1.y + rectSize);
+    ImU32 color = ImGui::GetColorU32(ImVec4(
+        fixtures[i].channels[1], // R
+        fixtures[i].channels[2], // G
+        fixtures[i].channels[3], // B
+        1.0f));
+    drawList->AddRectFilled(pos1, pos2, color, 4.0f);
+}
+```
+
+**Channel convention** (from Phase 0): channels[1], [2], [3] = R, G, B.
+Channels[0] = Dimmer (intensity, multiplies color).
+Channels[4], [5] = Pan, Tilt.
+
+Will be replaced by real fixture types when Spatial Operator lands.
+
+------------------------------------------------------------------------
+What Phase 0 validated (and what it didn't)
+------------------------------------------------------------------------
+**Validated**:
+- Window + OpenGL 4.6 context creation on Windows
+- SDL3 + ImGui + GL3W + OpenGL 4.6 toolchain compiles and runs
+- GPU compute shaders dispatch and produce correct output
+- SSBO readback to CPU is reliable (memory barrier works)
+- ImGui can render fixture-grid visualizations
+
+**Did NOT validate** (these are Phase 1+ work):
+- Real node graph (Phase 0 math was hardcoded)
+- Substrate architecture (no graph container, no eval loop)
+- Persistence / serialization
+- Surface / busking UI
+- Real DMX/Art-Net/sACN output
+- Real fixture types (GDTF)
+- 3D spatial preview
+
+Don't confuse "the toolchain works" with "the system works." Phase 0 proved the
+former. Phase 1+ builds the latter on top.
