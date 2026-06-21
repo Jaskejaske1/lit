@@ -86,6 +86,39 @@ target_compile_definitions(imgui PUBLIC IMGUI_IMPL_OPENGL_LOADER_GL3W)
 target_link_libraries(imgui PUBLIC gl3w_loader SDL3::SDL3)
 
 # ============================================================================
+# Substrate — the core library (Phase 1+)
+# ============================================================================
+# Header-only for v0: type system, sockets, nodes, registry.
+# All other targets (tests, executables) link against `substrate` and
+# include <substrate/substrate.h>.
+
+add_library(substrate STATIC
+    src/substrate/value.h
+    src/substrate/socket.h
+    src/substrate/node.h
+    src/substrate/substrate.h
+    src/substrate/substrate.cpp
+)
+target_include_directories(substrate PUBLIC ${CMAKE_SOURCE_DIR}/src)
+
+# ============================================================================
+# Tests
+# ============================================================================
+
+add_executable(test_substrate tests/test_substrate.cpp)
+target_link_libraries(test_substrate PRIVATE substrate)
+
+# ============================================================================
+# lit_view — substrate dev console (Phase 1.a, the seed of the Builder binary)
+# ============================================================================
+# Minimum host shell: window + OpenGL 4.6 + ImGui + a debug panel that
+# inspects the substrate's data model. No graph eval yet — that lands with
+# Connection + Graph in the next step.
+
+add_executable(lit_view src/view/main.cpp)
+target_link_libraries(lit_view PRIVATE substrate imgui)
+
+# ============================================================================
 # Summary
 # ============================================================================
 message(STATUS "")
@@ -95,5 +128,7 @@ message(STATUS "  Generator:       ${CMAKE_GENERATOR}")
 message(STATUS "  Platform:        ${CMAKE_GENERATOR_PLATFORM}")
 message(STATUS "  Output (exec):   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
 message(STATUS "  Output (libs):   ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}")
-message(STATUS "  Substrate:       (empty — Phase 1+ code goes in src/)")
+message(STATUS "  Substrate:       src/substrate/ (header-only static lib)")
+message(STATUS "  Tests:           tests/test_substrate")
+message(STATUS "  lit_view:        src/view/  (substrate dev console)")
 message(STATUS "")

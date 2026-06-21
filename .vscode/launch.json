@@ -2,10 +2,10 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Debug lit Engine",
+            "name": "Debug lit_view",
             "type": "cppvsdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/cmake-build/bin/Debug/lit.exe",
+            "program": "${workspaceFolder}/cmake-build/bin/Debug/lit_view.exe",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/cmake-build/bin/Debug",
@@ -14,16 +14,28 @@
             "preLaunchTask": "build"
         },
         {
-            "name": "Release lit Engine",
+            "name": "Release lit_view",
             "type": "cppvsdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/cmake-build/bin/Release/lit.exe",
+            "program": "${workspaceFolder}/cmake-build/bin/Release/lit_view.exe",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/cmake-build/bin/Release",
             "environment": [],
             "console": "integratedTerminal",
             "preLaunchTask": "build release"
+        },
+        {
+            "name": "Debug test_substrate",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/cmake-build/bin/Debug/test_substrate.exe",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/cmake-build/bin/Debug",
+            "environment": [],
+            "console": "integratedTerminal",
+            "preLaunchTask": "build"
         }
     ]
 }
