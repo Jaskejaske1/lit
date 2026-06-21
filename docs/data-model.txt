@@ -79,7 +79,7 @@ Data Types
 The substrate's typed data system. Two fundamental concepts:
 
 - Stream — continuous data flow at some rate
-- Bang — discrete event (no value, just "something happened")
+- Event — discrete event (no value, just "something happened")
 
 Streams carry structured values. Structure is the only type:
 - Scalar — 1 numeric value (period, tau, dimmer, tilt, etc.)
@@ -92,11 +92,49 @@ Conventions (not types):
 - Color is a Vector3 (H, S, L). Position is a Vector3 (X, Y, Z). RGB is a Vector3. Same structure, different interpretation by the consuming node.
 - Earlier attempts at semantic types ("Pulse", "Color", "Pose") were too vague. Structural approach is stricter and matches Max/MSP.
 
-Stream rates:
-- Frame-rate (default) — updates every frame (~60Hz). The math result.
-- Event-rate — updates only when value changes. For slow-changing data.
+Engine tick (frame rate)
+========================
+The substrate's main loop. Runs the math for every Node in the graph at a fixed rate, topologically sorted.
 
-Bangs:
+- **Default: 60 Hz.**
+- **Per-graph configurable:** 30 / 60 / 120 / 240 Hz (preset choices, not arbitrary — exposing arbitrary rates is a footgun).
+- **Decoupled from output rate.** DMX/Art-Net/sACN output runs at its own protocol-dependent rate (DMX capped at ~44 Hz per universe). Output reads the latest graph output; doesn't have to match graph tick.
+- **Time tracked as float seconds internally.** `elapsed_seconds` accumulator. `dt` (delta time since last tick) is passed to nodes that need it (Decay, Phase, Ramp).
+- **Rate changes are safe** because nothing counts frames — math uses elapsed time, not frame index. Bumping a graph from 60to120 Hz doesn't break anything.
+
+Topological evaluation order
+============================
+Nodes are evaluated in dependency order each tick: a node's inputs are guaranteed to be the outputs of nodes already evaluated this tick.
+
+- **Computed once at bake time.** The topological order stays stable as long as topology doesn't change. Live cost = walking a pre-computed list. Build-time cost = one topo sort over the DAG.
+- **Cycles are forbidden.** A cycle means undefined behavior (chicken-and-egg: which node runs first?). Detected and rejected at build time with a clear error pointing to the offending nodes. No silent failure.
+- **Nested Intentions flatten.** At bake time, the substrate inlines the nested graph into one big DAG. No special runtime handling for nesting — it's just one topo sort over the flattened graph.
+- **Stable order across runs.** Same topology to same evaluation order. State behaves deterministically — important for debugging and for any node that depends on evaluation order (e.g., feedback-adjacent patterns).
+
+Why this matters: by the time the Spatial Fixture Driver evaluates, every upstream node (BPM Tap, Phase, Decay, MIX) has already produced its value for this tick. One frame in, one coherent result out.
+
+Initialization (cold start, warm start, init pass)
+==================================================
+Every graph needs defined outputs at tick=0. The substrate handles this in three layers — no flicker, no arbitrary magic numbers.
+
+- **Type defaults** — every Type declares natural cold-start values for its state fields in `state_schema` (e.g., Phase `state.phase = 0`, Decay `state.prev_value = null`, BPM Tap `state.last_beat = null`). These are the math's natural starting point, not arbitrary.
+- **Preset overrides** — instantiating a Preset writes per-instance initial values into the Node's state (e.g., a "Sweep Starting Mid-Cycle" Preset sets `state.phase = π/2` for its Phase node). Presets own per-instance defaults; Types own type-level defaults. Both layers needed.
+- **Init pass** — before tick=0, the engine walks the DAG once in topo order and asks each node to produce its initial outputs from current state + initial inputs. Time does NOT advance. Counters do NOT increment. Result: tick=0 produces coherent outputs. First live frame is correct.
+- **Warm start across switches** — when the operator switches Intentions mid-show, the outgoing Intention's state is saved and restored as the init state if it returns later. Phase counters continue from where they were. Continuity, not jump.
+
+Why this beats the alternatives:
+- "Just use state_schema defaults, skip the init pass" → flicker. Decay outputs 0 on tick=0 then snaps to real values on tick=1. Visible.
+- "No defaults, require explicit init" → too rigid. Every Phase node everywhere needs babysitting.
+- "Soft start, ramp from default over N frames" → doesn't fix flicker, just delays it inside a "first second is wrong" zone.
+- "Block output until stable" → first N frames produce nothing. Worse than flicker.
+
+The init pass makes "outputs are coherent from frame 1" a property of the engine, not a discipline every graph author has to maintain.
+
+Stream rates (two kinds, defined by the engine tick):
+- **Frame-rate** (default) — updates every tick of the substrate's main loop (60 Hz default, per-graph configurable: 30/60/120/240).
+- **Event-rate** — updates only when value changes. For slow-changing data.
+
+Events:
 - Discrete events with no value. Fire-and-forget.
 - Used for triggers (beat, button press, threshold crossed).
 
@@ -104,18 +142,9 @@ Connection rules (Max/MSP-style, loose):
 
 - Same structure — connect (pass through)
 - Different structure — conversion needed (explicit operator or auto-fill)
-- Stream to Bang — threshold detector (value crosses X, fires bang)
-- Bang to Stream — trigger (e.g., sets value to 1)
+- Stream to Event — threshold detector (value crosses X, fires event)
+- Event to Stream — trigger (e.g., sets value to 1)
 - Math nodes decide what to do with values. The type is structural, not semantic.
-
-Socket field updates:
-
-- Socket now has: Name, Structure (Scalar/Vector2/Vector3/Vector4/Bang), Direction (Input/Output), Default (Input), Current value, Rate (Frame/Event), Range (optional), UI hint
-- "Pulse" to Bang
-- "Color" / "Pose" to Vector3 (with consumer-side interpretation)
-- "Float" to Scalar
-- "Time" to Scalar (with Rate=Frame, default updated by time source)
-- "Beat" / "Pulse (continuous)" to Stream of Bang at a rate, OR Frame-rate Scalar (depending on what the consumer expects)
 
 Parameter
 =========

@@ -45,19 +45,19 @@ Split between contexts:
 - The visual field preview and real fixture visualizer are optional on stage — useful for confidence, not required for busking.
 
 What each inspiration actually gives us (and what it doesn't):
-- Wolfmix W1 → tactile FX engines (color/move/beam separated), busking-first feeling. Limited customization, doesn't scale to big rigs.
-- Max/MSP → deep patching power. Audio-rate, generic, set-and-let-run. Not live-performance oriented — bad fit for festivals.
-- TouchDesigner → spatial math over 3D canvas, GPU-accelerated. Imperative visual programming, kills live flow.
-- Ableton + Max4Live → the build/use split (device surface, deep patch underneath). The INTERACTION MODEL we want.
-- MA2 / ChamSys → industry output (DMX/Art-Net/sACN), fixture profiles. NOT the workflow.
-- Christian Jackson MA2 layout views → the visual language of how operators actually structure their live surface.
-- Chataigne → data routing between protocols (OSC, MIDI, DMX, ArtNet).
-- OSCPilot → brutalist touch-first UI, fast response, zero internal logic.
-- Capture → GDTF-based real fixture rendering. The reference for the real visualizer.
+- Wolfmix W1 to tactile FX engines (color/move/beam separated), busking-first feeling. Limited customization, doesn't scale to big rigs.
+- Max/MSP to deep patching power. Audio-rate, generic, set-and-let-run. Not live-performance oriented — bad fit for festivals.
+- TouchDesigner to spatial math over 3D canvas, GPU-accelerated. Imperative visual programming, kills live flow.
+- Ableton + Max4Live to the build/use split (device surface, deep patch underneath). The INTERACTION MODEL we want.
+- MA2 / ChamSys to industry output (DMX/Art-Net/sACN), fixture profiles. NOT the workflow.
+- Christian Jackson MA2 layout views to the visual language of how operators actually structure their live surface.
+- Chataigne to data routing between protocols (OSC, MIDI, DMX, ArtNet).
+- OSCPilot to brutalist touch-first UI, fast response, zero internal logic.
+- Capture to GDTF-based real fixture rendering. The reference for the real visualizer.
 
 Open questions:
 - Intention data model: what does a packaged substrate module actually look like on disk? State I/O, parameters, subpatch references, metadata
-- Substrate → surface communication: events, polling, shared memory?
+- Substrate to surface communication: events, polling, shared memory?
 - Node graph serialization format
 - Visual representation of nodes (icon, color, parameters visible inline?)
 - How does the visual field preview know which axes/scale to show?
@@ -71,7 +71,7 @@ Personal motivation (don't lose this):
 - This is research. No deadlines. No customers. Just untangling an idea that nobody else has built
 
 About the existing C++ in /src and /build:
-- That's a testing base layer, not the system. It validates one thing: GPU compute → SSBO → CPU readback → visualization works
+- That's a testing base layer, not the system. It validates one thing: GPU compute to SSBO to CPU readback to visualization works
 - The substrate will replace the hardcoded math with a real node graph
 - Toolchain (SDL3 + ImGui + GL3W + OpenGL 4.6) is validated
 - Abstract Node base class (Initialize/Process/DrawUI) is the seed
@@ -104,15 +104,41 @@ Bake constraint (architectural hardening, settled):
 - Pragmatic approach: start interpreted (simplest substrate), measure, bake only as much as needed
 - Whether bake is needed depends on graph size and complexity. Small graphs may not need it at all.
 
-Program architecture (three separate binaries):
-- The system is three executables, not one app:
+Program architecture (library first, three thin binaries):
+- **Shared substrate library** — the real work. Holds node graph engine, math primitives, fixture system, color math, OSC comms, serialization. All three binaries link to it. STATIC library, lives in one repo, built once.
+- **The library is the first deliverable.** Builder / Operation / Visualizer can't exist without the engine to drive them. They share everything — fixture types, color math, OSC, time signals. Don't write it three times.
+- The system is three executables + one library + external:
   1. **Builder** — substrate editor + visual field preview. Dev-only. Compiles and bakes Intentions at build time.
-  2. **Operation** — runtime Intentions + busking surface + MIDI/OSC + DMX/Art-Net/sACN output. Lives at the show. Lean by design (no editing features, no heavy viz).
+  2. **Operation** — runtime Intentions + busking surface + MIDI/OSC + DMX/Art-Net/sACN output. Lives at the show. Lean by design.
   3. **Visualizer** — spatial field preview + receives baked shaders from Builder. Runs on beefy hardware with a real GPU. Optional during live.
-  4. **(External) Capture** — real fixture viz, GDTF-based. Used as-is, not built by us.
-- All four communicate over OSC (Open Sound Control). Standard in lighting + media worlds.
-- The shader files (compiled compute shaders for spatial math) live on the Visualizer machine. Builder compiles them at bake time, transfers to Visualizer.
-- Three binaries = maximum flexibility. Each can be deployed independently based on the show's needs.
+  4. **(External) Capture** — real fixture viz, GDTF-based. Used as-is.
+- All four (three + external) communicate over OSC (Open Sound Control). Standard in lighting + media worlds.
+- Three binaries + one library = maximum flexibility. Each binary deploys independently based on the show's needs.
+
+Build system (CMake):
+- **CMake 3.20+** as the build tool. Industry standard for C++. Robust, IDE-agnostic, CI-friendly, mature.
+- Vendored dependencies in `deps/` for now (SDL3 precompiled, ImGui + GL3W compiled from source). No external package manager needed for v0.
+- Output: `cmake-build/bin/` for executables, `cmake-build/lib/` for static libraries.
+- Replaces the previous hand-rolled PowerShell build script (`build.ps1`) which invoked `cl.exe` directly via `vcvars64.bat`. CMake is the single source of build truth now.
+- VSCode tasks (`tasks.json`) wrap cmake configure + build. `cmake-tools` extension recommended for IDE integration.
+- Future (not v0): add **vcpkg** for reproducible third-party dependency management. Not strictly needed while deps are vendored.
+
+Lighting output protocols (Operation binary's job):
+- **DMX512** — legacy serial protocol. ~44 Hz max per universe. The base of all professional lighting. Slowest but most universal.
+- **Art-Net** — DMX over UDP (Ethernet). Multiple universes, higher throughput than serial DMX. Industry standard for modern rigs.
+- **sACN (E1.31)** — DMX over multicast UDP. Similar to Art-Net, better multicast support, ACN family standard. Increasingly preferred over Art-Net in new installations.
+- All three supported by the Operation binary. Selected per-fixture / per-universe in the spatial setup.
+- These are the LAST layer — substrate math → per-fixture channel values → protocol packet → wire / ethernet.
+- Why three protocols: existing venues have existing infrastructure. Operation needs to talk to whatever's there. No single protocol wins everywhere.
+- Art-Net and sACN are network protocols — both run over standard Ethernet hardware. No special cards needed, just gigabit switches.
+
+Serialization:
+- **Live runtime format: FlatBuffers.** Zero-copy deserialization, random access by offset, schema evolution via field IDs. Operation loads FlatBuffers directly at showtime.
+- **Builder save format: FlatBuffers.** Single canonical format. Builder writes FlatBuffers directly. Git stores binary blobs (works fine; you just don't diff them in text).
+- **JSON export** is a Builder feature, not a default. Used when you want to share a patch via text or compare graphs outside Builder.
+- **No JSON in the live path.** Operation loads FlatBuffers, period. JSON has no place at showtime.
+- **Bake step is graph → optimized graph, format stays FlatBuffers.** Bake may produce a different optimized schema, but the wire format is still FlatBuffers. No format conversion at runtime.
+- Alternatives considered and rejected: Protobuf (mature but copies on read, not peak), Cap'n Proto (faster but younger tooling), custom binary (maximum work, no migration story), JSON-only (insufficient for "most efficient").
 
 Compute target (CPU default, GPU optional):
 - CPU evaluation is the DEFAULT. Modern multi-core CPUs handle spatial math over hundreds of fixtures easily.
@@ -205,18 +231,18 @@ Connection model (cleaner):
 **Connection data conversion rules (explicit, not silent):**
 - Connection is pure transport. No silent conversion.
 - Allowed implicit conversions:
-  - Same type → pass through unchanged
-  - int → float → implicit (lossless, every int fits in float)
+  - Same type to pass through unchanged
+  - int to float to implicit (lossless, every int fits in float)
 - Forbidden implicit conversions (require explicit operator):
-  - float → int → requires Round / Floor / Ceil / Clamp operator
-  - Vector3 → Color → requires explicit construction
-  - Color → Vector3 → requires explicit extraction (but possibly implicit if just reading channels)
+  - float to int to requires Round / Floor / Ceil / Clamp operator
+  - Vector3 to Color to requires explicit construction
+  - Color to Vector3 to requires explicit extraction (but possibly implicit if just reading channels)
 - Full table documented in the engine. Errors are explicit and named.
 
 Clone-and-modify UX (how the library grows):
-- Right-click any Intention in the library → Clone
+- Right-click any Intention in the library to Clone
 - It appears as a new editable copy
-- Crack it open (Escape Hatch) → modify the underlying graph
+- Crack it open (Escape Hatch) to modify the underlying graph
 - Save as new Intention
 - This is a primary way the library compounds over time
 
@@ -245,10 +271,10 @@ Bypass flag (per Node):
 - Toggle in the inspector panel
 - Same concept as bypass in audio effects
 
-Data model: Streams + Bangs (Max/MSP-style, not semantic types):
+Data model: Streams + Events (Max/MSP-style, not semantic types):
 - Two fundamental data concepts, no more:
   - **Stream** — continuous data flow at some rate
-  - **Bang** — discrete event (no value, just "something happened")
+  - **Event** — discrete event (no value, just "something happened")
 - Streams carry **structured values**. The structure is the only type:
   - **Scalar** — 1 numeric value (period, tau, dimmer, tilt)
   - **Vector2** — 2 numeric values (pan+tilt, X+Y)
@@ -262,16 +288,31 @@ Stream rates:
 - **Frame-rate** (default): updates every frame (~60Hz). The math result.
 - **Event-rate**: updates only when value changes. For slow-changing data.
 
-Bangs:
+Events:
 - Discrete events with no value
 - Fire-and-forget
 - Used for triggers (beat, button press, threshold crossed)
 
+Frame rate (the substrate's main tick):
+- **Default: 60 Hz.** Familiar, smooth for most lighting effects, low CPU. Matches video convention and every visual tool people already know (TouchDesigner, Resolume, MadMapper, HeavyM).
+- **Configurable per graph, not baked-in.** Pick from presets: 30 / 60 / 120 / 240 Hz. Don't expose arbitrary rates — footgun. Different graphs want different rates:
+  - 30 Hz: slow ambient, minimal CPU
+  - 60 Hz: default, covers everything
+  - 120 Hz: fast pixel sweeps, motion-blur feel, high BPM
+  - 240 Hz: rare, only when the math genuinely demands it
+- **Decoupled from output rate.** Three independent loops:
+  1. **Graph tick** — substrate math runs at graph rate (60 Hz default). Produces new output values.
+  2. **Output tick** — DMX/Art-Net/sACN sends at protocol rate (DMX capped at ~44 Hz per universe; Art-Net/sACN can go higher). Reads the latest graph output.
+  3. **Viz tick** — visualizer reads at display rate. Independent.
+- **Time as float seconds, not frame counts.** Internal clock = `elapsed_seconds` accumulator. Pass `dt` (delta time since last tick) to nodes that need it (Decay, Phase, Ramp). This is what makes rate changes safe — if you bump a graph from 60 to 120 Hz, nothing breaks because nothing was counting frames.
+- **Why not higher (1000 Hz like MA2/3 internal)?** MA runs high for fade precision over very long cue-based fades. We're continuous math, not cue-based — 60 Hz is plenty. 1000 Hz = 16× the CPU for zero visible lighting gain.
+- **Why not lower (30 Hz)?** LFO at 5 Hz gets only 6 samples per cycle. Visible stair-stepping. Pixel sweeps judder. Not enough headroom for fast effects.
+
 Connection rules (Max/MSP-style, loose):
-- Same structure → connect (pass through)
-- Different structure → conversion needed (explicit operator or auto-fill)
-- Stream → Bang: threshold detector (value crosses X, fires bang)
-- Bang → Stream: trigger (e.g., sets value to 1)
+- Same structure to connect (pass through)
+- Different structure to conversion needed (explicit operator or auto-fill)
+- Stream to Event: threshold detector (value crosses X, fires event)
+- Event to Stream: trigger (e.g., sets value to 1)
 - Math nodes decide what to do with values. The type is structural, not semantic.
 
 Color workspace (HSL, recommended for color streams):
@@ -284,8 +325,8 @@ Color workspace (HSL, recommended for color streams):
   - If we need other models later (HSV, OKLab, etc.), we can layer them on
 - Future consideration (not v0): CIE 1931, CCT (correlated color temperature) for pro color science
 - Fixture-profile mapping per fixture type (handles white channel and other variations):
-  - RGB: standard HSL→RGB math
-  - RGBW: low saturation → white channel wins. High saturation → RGB channels only.
+  - RGB: standard HSLtoRGB math
+  - RGBW: low saturation to white channel wins. High saturation to RGB channels only.
   - CMY: inversion math
   - No white channel: profile knows, ignores W
 - This solves the white-channel-ignored problem at the engine level, not the fixture level

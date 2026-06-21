@@ -42,7 +42,7 @@ Each phase should also mark which program(s) it touches (Builder, Operation, Vis
 
 Phase 0 - Validate the toolchain (DONE)
 - Status: complete
-- What got built: GPU compute → SSBO → CPU readback → ImGui visualization loop
+- What got built: GPU compute to SSBO to CPU readback to ImGui visualization loop
 - What it proves: the foundation works (window, GL context, GPU math, data roundtrip, viz)
 - What it ISN'T: the system. It's a testing base layer.
 - Note: hardcoded math, single effect, no node graph, no library, no surface, no 3D
@@ -52,14 +52,14 @@ Phase 1 - Real substrate skeleton
 - What gets built:
   - Real node graph (not hardcoded): Generators (LFO, noise, time, audio FFT later), Modifiers (multiply, clamp, lag, math), Outputs (compute target)
   - Subpatches: nodes that wrap other nodes
-  - Bake step: graph → optimized runtime form (one of: compiled GLSL compute shader, pre-allocated runtime struct, native C++ function — TBD)
+  - Bake step: graph to optimized runtime form (one of: compiled GLSL compute shader, pre-allocated runtime struct, native C++ function — TBD)
   - Live data flow visible in the graph itself during build (wires show actual values, not just connections)
   - Visual field preview (Phase 3 work pulled forward, since you need it to see anything spatial)
 - Bake constraint applies: topology fixed at build-time, runtime only varies parameters
 - Test case: the diagonal pixel bars red sweep + tilt sweep effect, built inside the substrate, baked, running
 - This is the biggest single phase. Substrate + visual field preview + bake is most of the project.
 
-Phase 2 - Packaging (substrate module → Intention)
+Phase 2 - Packaging (substrate module to Intention)
 - Exit criterion: one Intention saved, loaded, exposed parameters working
 - What gets built:
   - Save a node graph as an Intention with metadata (name, tags, exposed parameters)
