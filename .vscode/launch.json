@@ -2,16 +2,28 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Debug lit Engine (MSVC)",
+            "name": "Debug lit Engine",
             "type": "cppvsdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/lit.exe",
+            "program": "${workspaceFolder}/cmake-build/bin/Debug/lit.exe",
             "args": [],
             "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/build",
+            "cwd": "${workspaceFolder}/cmake-build/bin/Debug",
             "environment": [],
             "console": "integratedTerminal",
-            "preLaunchTask": "Build lit Engine"
+            "preLaunchTask": "build"
+        },
+        {
+            "name": "Release lit Engine",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/cmake-build/bin/Release/lit.exe",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/cmake-build/bin/Release",
+            "environment": [],
+            "console": "integratedTerminal",
+            "preLaunchTask": "build release"
         }
     ]
 }

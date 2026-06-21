@@ -1,8 +1,19 @@
 {
   "python.analysis.ignore": [
-    "deps/**"
+    "deps/**",
+    "cmake-build/**"
   ],
   "python.analysis.exclude": [
-    "deps/**", "**/node_modules", "**/__pycache__", "**/.*"
-  ]
+    "deps/**",
+    "cmake-build/**",
+    "**/node_modules",
+    "**/__pycache__",
+    "**/.*"
+  ],
+  "files.watcherExclude": {
+    "**/cmake-build/**": true
+  },
+  "search.exclude": {
+    "**/cmake-build/**": true
+  }
 }

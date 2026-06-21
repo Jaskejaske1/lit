@@ -2,25 +2,78 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "Build lit Engine",
+            "label": "configure",
             "type": "shell",
-            "command": "powershell.exe",
+            "command": "cmake",
             "args": [
-                "-ExecutionPolicy",
-                "Bypass",
-                "-File",
-                ".\\build.ps1"
+                "-B",
+                "${workspaceFolder}/cmake-build",
+                "-S",
+                "${workspaceFolder}"
+            ],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "clear": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "build",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "--build",
+                "${workspaceFolder}/cmake-build",
+                "--config",
+                "Debug"
             ],
             "group": {
                 "kind": "build",
                 "isDefault": true
             },
+            "dependsOn": "configure",
             "presentation": {
                 "reveal": "always",
                 "panel": "shared",
                 "clear": true
             },
             "problemMatcher": "$msCompile"
+        },
+        {
+            "label": "build release",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "--build",
+                "${workspaceFolder}/cmake-build",
+                "--config",
+                "Release"
+            ],
+            "group": "build",
+            "dependsOn": "configure",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "clear": true
+            },
+            "problemMatcher": "$msCompile"
+        },
+        {
+            "label": "clean",
+            "type": "shell",
+            "command": "Remove-Item",
+            "args": [
+                "-Recurse",
+                "-Force",
+                "${workspaceFolder}/cmake-build"
+            ],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "clear": true
+            },
+            "problemMatcher": []
         }
     ]
 }

@@ -16,7 +16,7 @@ imgui.ini
 
 # lit Engine Specific
 /build/
-/deps/
+/cmake-build/
 
 # Visual Studio & VS Code Caches
 .vs/
