@@ -1,5 +1,5 @@
 lit - Data Model
-===============
+================
 
 The substrate's core data types. Built interactively.
 
@@ -14,39 +14,33 @@ Types to define:
 - Fixture
 - Spatial Operator
 
----
-
 Node
 ====
 
 The smallest unit in the substrate. Runs some math, has inputs and outputs, has configurable parameters.
 
 Fields:
-- ID          — unique within the graph, how the graph refers to it
-- Type        — reference into the substrate's flat node-type registry (e.g., "BPM Tap", "Phase", "Decay"). Type is CLASSIFICATION: many nodes can share the same Type.
-- Name        — instance label, shows up in the editor. Name is IDENTITY: distinguishes one specific node from another.
-- Position    — (x, y) where it appears in the visual graph. User drags to position. UI-only, not math.
-- Inputs[]    — input Sockets (name, data type, default value, current value)
-- Outputs[]   — output Sockets (name, data type, produced value)
-- State       — per-node runtime memory, `{ name: value, ... }`. Type declares what state keys it needs (in its registry definition), Node holds the actual values per key. Examples: LFO `{ "phase": 0.5 }`, Decay `{ "prev_value": 0.7 }`.
-- Bypass      — boolean flag. When true, Node is muted (output = identity / zero). Visual indicator on node + toggle in inspector.
-- Comments    — free-text documentation. Shown in inspector. Useful for complex graphs where you'll forget why you did something.
+- ID — unique within the graph, how the graph refers to it
+- Type — reference into the substrate's flat node-type registry (e.g., "BPM Tap", "Phase", "Decay"). Type is CLASSIFICATION: many nodes can share the same Type.
+- Name — instance label, shows up in the editor. Name is IDENTITY: distinguishes one specific node from another.
+- Position — (x, y) where it appears in the visual graph. User drags to position. UI-only, not math.
+- Inputs[] — input Sockets (name, data type, default value, current value)
+- Outputs[] — output Sockets (name, data type, produced value)
+- State — per-node runtime memory, { name: value, ... }. Type declares what state keys it needs (in its registry definition), Node holds the actual values per key. Examples: LFO { "phase": 0.5 }, Decay { "prev_value": 0.7 }.
+- Bypass — boolean flag. When true, Node is muted (output = identity / zero). Visual indicator on node + toggle in inspector.
+- Comments — free-text documentation. Shown in inspector. Useful for complex graphs where you'll forget why you did something.
 
 Three-layer hierarchy above the Node:
-- **Type** = classification in the registry
-- **Name** = instance label for a specific Node in a graph
-- **Preset** = pre-configured variant of a Type with default parameter values, saveable as a reusable starting point
-
----
+- Type — classification in the registry
+- Name — instance label for a specific Node in a graph
+- Preset — pre-configured variant of a Type with default parameter values, saveable as a reusable starting point
 
 Node Type Registry
 ==================
-
 Flat list of node types. No inheritance. Each entry:
 
-```
 {
-  "name": "Phase",                 // unique identifier (the TYPE)
+  "name": "Phase",                  // unique identifier (the TYPE)
   "display_name": "Phase",          // for UI
   "category": "Generator",          // for UI grouping (Generators / Modifiers / Outputs / etc.)
   "inputs": [
@@ -62,183 +56,134 @@ Flat list of node types. No inheritance. Each entry:
   ],
   "evaluate": <reference to math function>
 }
-```
 
 Categories are just UI labels. The type itself doesn't care.
 
----
-
 Socket
 ======
-
 A typed data port on a Node. Inputs are parameters with default values; outputs are produced values.
 
 Fields:
-- Name        — human-readable label (e.g., "Period", "Intensity", "Color")
-- Data type   — see Data Types section below
-- Direction   — Input or Output
-- For Input:
-  - Default   — value used when no connection is present
-  - Current   — live value (default OR connected source's value)
-- For Output:
-  - Current   — value produced by the node this frame
-- Range       — optional min/max constraints (for UI slider bounds)
-- UI hint     — how to render in the visual editor (slider, color picker, etc.)
+- Name — human-readable label (e.g., "Period", "Intensity", "Color")
+- Data type — see Data Types section below
+- Direction — Input or Output
+- Default (Input only) — value used when no connection is present
+- Current — live value (default OR connected source's value for Input; produced value for Output)
+- Range — optional min/max constraints (for UI slider bounds)
+- UI hint — how to render in the visual editor (slider, color picker, etc.)
 
 UI: show current value inline at all times (default when disconnected, connected source's value when connected).
 
----
-
 Data Types
 ==========
-
 The substrate's typed data system. Two fundamental concepts:
 
-- **Stream** — continuous data flow at some rate
-- **Bang** — discrete event (no value, just "something happened")
+- Stream — continuous data flow at some rate
+- Bang — discrete event (no value, just "something happened")
 
-Streams carry **structured values**. Structure is the only type:
-
-- **Scalar**   — 1 numeric value (period, tau, dimmer, tilt, etc.)
-- **Vector2** — 2 numeric values (pan+tilt, X+Y, etc.)
-- **Vector3** — 3 numeric values (color HSL = H+S+L, position XYZ, RGB)
-- **Vector4** — 4 numeric values (RGBA, RGBW)
-- (Future) **AudioBuffer** — many values
+Streams carry structured values. Structure is the only type:
+- Scalar — 1 numeric value (period, tau, dimmer, tilt, etc.)
+- Vector2 — 2 numeric values (pan+tilt, X+Y, etc.)
+- Vector3 — 3 numeric values (color HSL = H+S+L, position XYZ, RGB)
+- Vector4 — 4 numeric values (RGBA, RGBW)
+- AudioBuffer — many values (Future)
 
 Conventions (not types):
 - Color is a Vector3 (H, S, L). Position is a Vector3 (X, Y, Z). RGB is a Vector3. Same structure, different interpretation by the consuming node.
 - Earlier attempts at semantic types ("Pulse", "Color", "Pose") were too vague. Structural approach is stricter and matches Max/MSP.
 
 Stream rates:
-- **Frame-rate** (default) — updates every frame (~60Hz). The math result.
-- **Event-rate** — updates only when value changes. For slow-changing data.
+- Frame-rate (default) — updates every frame (~60Hz). The math result.
+- Event-rate — updates only when value changes. For slow-changing data.
 
 Bangs:
 - Discrete events with no value. Fire-and-forget.
 - Used for triggers (beat, button press, threshold crossed).
 
 Connection rules (Max/MSP-style, loose):
-- Same structure → connect (pass through)
-- Different structure → conversion needed (explicit operator or auto-fill)
-- Stream → Bang: threshold detector (value crosses X, fires bang)
-- Bang → Stream: trigger (e.g., sets value to 1)
+
+- Same structure — connect (pass through)
+- Different structure — conversion needed (explicit operator or auto-fill)
+- Stream to Bang — threshold detector (value crosses X, fires bang)
+- Bang to Stream — trigger (e.g., sets value to 1)
 - Math nodes decide what to do with values. The type is structural, not semantic.
 
 Socket field updates:
-- Socket now has: Name, Structure (Scalar/Vector2/Vector3/Vector4/Bang), Direction (Input/Output), Default (Input), Current value, Rate (Frame/Event), Range (optional), UI hint
-- "Pulse" → Bang
-- "Color" / "Pose" → Vector3 (with consumer-side interpretation)
-- "Float" → Scalar
-- "Time" → Scalar (with Rate=Frame, default updated by time source)
-- "Beat" / "Pulse (continuous)" → Stream of Bang at a rate, OR Frame-rate Scalar (depending on what the consumer expects)
 
----
+- Socket now has: Name, Structure (Scalar/Vector2/Vector3/Vector4/Bang), Direction (Input/Output), Default (Input), Current value, Rate (Frame/Event), Range (optional), UI hint
+- "Pulse" to Bang
+- "Color" / "Pose" to Vector3 (with consumer-side interpretation)
+- "Float" to Scalar
+- "Time" to Scalar (with Rate=Frame, default updated by time source)
+- "Beat" / "Pulse (continuous)" to Stream of Bang at a rate, OR Frame-rate Scalar (depending on what the consumer expects)
 
 Parameter
 =========
+As established: Parameters and Sockets are unified. A Parameter is simply an Input Socket viewed from the UI perspective.
 
-[pending — unified with Socket, refinement after data types]
-
----
+Rules:
+- State — EITHER a constant literal value OR a live connection. Never both.
+- Disconnected — UI shows the literal value (e.g., a slider for 0.5, a color picker for Vector3). The substrate uses this as the Default.
+- Connected — UI shows the live value flowing through the wire. The literal value is ignored.
 
 Connection
 ==========
-
-A link between an Output Socket and an Input Socket.
+A pure transport link between an Output and an Input. It is a separate object in the Graph, keeping wiring decoupled from data.
 
 Fields:
-- Source      — reference to the Output Socket
-- Destination — reference to the Input Socket
+- ID — unique identifier for the connection
+- Source — reference to Node ID + Output Socket ID
+- Destination — reference to Node ID + Input Socket ID
+
+Rules:
+- Implicit conversion — allowed if lossless (e.g., int to float).
+- Silent conversions — across different structures (Vector3 to Scalar) are forbidden. Requires an explicit math/extraction node.
 
 Connection is a SEPARATE OBJECT in the Graph, not a field on Socket. Socket just has its current value.
 
----
-
 Graph
 =====
+The mathematical canvas. A container for Nodes and Connections.
 
-[defined below]
-
----
+Fields:
+- Nodes[] — the list of instantiated nodes
+- Connections[] — the list of wires linking them
+- Baked State — boolean or enum. Is this graph currently being edited (interpreted/dynamic), or has it been compiled/baked for zero-latency runtime?
 
 Intention
 =========
+A packaged, reusable Graph. This is what the operator interacts with on the Surface. It hides the Substrate graph and only exposes what the creator wants exposed.
 
-[defined below]
-
----
-
-Nested Intention / Subpatch
-============================
-
-[defined below]
-
----
-
-Fixture
-=======
-
-[defined below]
-
----
-
-Spatial Operator
-================
-
-[defined below]
-
----
-
-Socket
-======
-
-[defined below]
-
----
-
-Parameter
-=========
-
-[defined below]
-
----
-
-Connection
-==========
-
-[defined below]
-
----
-
-Graph
-=====
-
-[defined below]
-
----
-
-Intention
-=========
-
-[defined below]
-
----
+Fields:
+- Name — e.g., "Diagonal Red Sweep"
+- Graph — the underlying node network
+- Exposed Inputs[] — specific Input Sockets from deep inside the graph that are routed to the Surface (e.g., the Period of a buried Phase node becomes "Sweep Speed").
+- Metadata — tags, categories, author (for the library browser)
 
 Nested Intention / Subpatch
-============================
+===========================
+An Intention used inside another Intention's Graph.
 
-[defined below]
+Rules:
+- Behavior — To the parent graph, it looks and acts exactly like a single Node.
+- Interface — The Exposed Inputs of the Intention become the Input Sockets of this Node.
+- Escape Hatch — Allows the user to crack it open, revealing the nested Graph.
+- Bake-time — The boundary dissolves. The substrate flattens the nested graph into one optimized runtime block.
 
----
+Fixture (The Probe)
+===================
+Not a profile, not a DMX footprint. Just a point in space that samples the math.
 
-Fixture
-=======
+Fields:
+- ID — UUID
+- Position — Vector3 (X, Y, Z coordinates in the 4D volume)
+- Traits[] — What the fixture is physically capable of (e.g., [Dimmer, Pan, Tilt, Color_RGB]). Used by the Spatial Operator to know what data to pull from the field.
 
-[defined below]
+Spatial Operator (Spatial Fixture Driver)
+=========================================
+The final node type in a positional chain. It bridges the pure math of the Substrate to the physical reality of the Fixtures.
 
----
-
-Spatial Operator
-================
-
-[defined below]
+Fields:
+- Inputs — Expects a spatial stream (math evaluated over X,Y,Z).
+- Behavior — Looks at the active Spatial Bounding Mask (e.g., "Only fixtures in the Back Truss"). For every Fixture in that mask, it evaluates the math at that Fixture's specific Vector3 position.
+- Outputs — Frame-rate streams mapped to generic traits (Dimmer = 0.8, Color = [0.1, 0.5, 0.9]).
