@@ -2,10 +2,10 @@
     "version": 3,
     "configurePresets": [
         {
-            "name": "base",
+            "name": "windows-base",
             "hidden": true,
             "generator": "Visual Studio 17 2022",
-            "binaryDir": "${sourceDir}/cmake-build",
+            "binaryDir": "${sourceDir}/cmake-build/windows",
             "architecture": {
                 "value": "x64",
                 "strategy": "set"
@@ -17,12 +17,37 @@
         {
             "name": "windows-debug",
             "displayName": "Windows Debug",
-            "inherits": "base"
+            "inherits": "windows-base"
         },
         {
             "name": "windows-release",
             "displayName": "Windows Release",
-            "inherits": "base"
+            "inherits": "windows-base"
+        },
+        {
+            "name": "linux-base",
+            "hidden": true,
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/cmake-build/linux",
+            "cacheVariables": {
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+            }
+        },
+        {
+            "name": "linux-debug",
+            "displayName": "Linux Debug",
+            "inherits": "linux-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "linux-release",
+            "displayName": "Linux Release",
+            "inherits": "linux-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release"
+            }
         }
     ],
     "buildPresets": [
@@ -33,6 +58,14 @@
         {
             "name": "windows-release",
             "configurePreset": "windows-release"
+        },
+        {
+            "name": "linux-debug",
+            "configurePreset": "linux-debug"
+        },
+        {
+            "name": "linux-release",
+            "configurePreset": "linux-release"
         }
     ]
 }

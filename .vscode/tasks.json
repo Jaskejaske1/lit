@@ -2,14 +2,12 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "configure",
+            "label": "configure (Linux)",
             "type": "shell",
             "command": "cmake",
             "args": [
-                "-B",
-                "${workspaceFolder}/cmake-build",
-                "-S",
-                "${workspaceFolder}"
+                "--preset",
+                "linux-debug"
             ],
             "presentation": {
                 "reveal": "always",
@@ -19,39 +17,85 @@
             "problemMatcher": []
         },
         {
-            "label": "build",
+            "label": "build (Linux Debug)",
             "type": "shell",
             "command": "cmake",
             "args": [
                 "--build",
-                "${workspaceFolder}/cmake-build",
-                "--config",
-                "Debug"
+                "--preset",
+                "linux-debug"
             ],
             "group": {
                 "kind": "build",
                 "isDefault": true
             },
-            "dependsOn": "configure",
+            "dependsOn": "configure (Linux)",
             "presentation": {
                 "reveal": "always",
                 "panel": "shared",
                 "clear": true
             },
-            "problemMatcher": "$msCompile"
+            "problemMatcher": "$gcc"
         },
         {
-            "label": "build release",
+            "label": "build (Linux Release)",
             "type": "shell",
             "command": "cmake",
             "args": [
                 "--build",
-                "${workspaceFolder}/cmake-build",
-                "--config",
-                "Release"
+                "--preset",
+                "linux-release"
             ],
             "group": "build",
-            "dependsOn": "configure",
+            "dependsOn": "configure (Linux)",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "clear": true
+            },
+            "problemMatcher": "$gcc"
+        },
+        {
+            "label": "clean (Linux)",
+            "type": "shell",
+            "command": "rm",
+            "args": [
+                "-rf",
+                "${workspaceFolder}/cmake-build/linux"
+            ],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "clear": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "configure (Windows)",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "--preset",
+                "windows-debug"
+            ],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "clear": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "build (Windows Debug)",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "--build",
+                "--preset",
+                "windows-debug"
+            ],
+            "group": "build",
+            "dependsOn": "configure (Windows)",
             "presentation": {
                 "reveal": "always",
                 "panel": "shared",
@@ -60,13 +104,31 @@
             "problemMatcher": "$msCompile"
         },
         {
-            "label": "clean",
+            "label": "build (Windows Release)",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "--build",
+                "--preset",
+                "windows-release"
+            ],
+            "group": "build",
+            "dependsOn": "configure (Windows)",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "clear": true
+            },
+            "problemMatcher": "$msCompile"
+        },
+        {
+            "label": "clean (Windows)",
             "type": "shell",
             "command": "Remove-Item",
             "args": [
                 "-Recurse",
                 "-Force",
-                "${workspaceFolder}/cmake-build"
+                "${workspaceFolder}/cmake-build/windows"
             ],
             "presentation": {
                 "reveal": "always",
