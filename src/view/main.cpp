@@ -39,42 +39,6 @@ extern "C" {
 using namespace substrate;
 
 // ============================================================================
-// Demo node types
-// ============================================================================
-// Duplicated from tests/test_substrate.cpp. These are still demo-only; real
-// time-based primitives like Phase now live in the substrate library.
-
-void constant_evaluate(Node& self, float, float, bool) {
-    self.outputs[0].current = self.state.at("value");
-}
-
-void register_constant_demo() {
-    NodeType t;
-    t.name         = "Constant";
-    t.display_name = "Constant";
-    t.category     = "Generator";
-    t.outputs.push_back({"Value", ValueType::Scalar, SocketValue{Scalar{0.0f}}, std::nullopt});
-    t.state_schema.push_back({"value", ValueType::Scalar, SocketValue{Scalar{0.5f}}});
-    t.evaluate = &constant_evaluate;
-    register_node_type(t);
-}
-
-void constant_vec3_evaluate(Node& self, float, float, bool) {
-    self.outputs[0].current = self.state.at("value");
-}
-
-void register_constant_vec3_demo() {
-    NodeType t;
-    t.name         = "ConstantVec3";
-    t.display_name = "Constant Vec3";
-    t.category     = "Generator";
-    t.outputs.push_back({"Value", ValueType::Vec3, SocketValue{Vec3{0.0f, 0.0f, 0.0f}}, std::nullopt});
-    t.state_schema.push_back({"value", ValueType::Vec3, SocketValue{Vec3{1.0f, 0.5f, 0.25f}}});
-    t.evaluate = &constant_vec3_evaluate;
-    register_node_type(t);
-}
-
-// ============================================================================
 // Display helpers
 // ============================================================================
 
@@ -133,10 +97,8 @@ struct App {
 };
 
 bool App::init() {
-    // 1. Register demo node types into the substrate's global registry.
-    register_constant_demo();
-    register_constant_vec3_demo();
-    register_phase_node_type();
+    // 1. Register the current library-owned substrate primitives.
+    register_builtin_node_types();
 
     // 2. SDL3
     if (!SDL_Init(SDL_INIT_VIDEO)) {

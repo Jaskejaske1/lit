@@ -24,46 +24,6 @@ using namespace substrate;
 // Test types
 // ----------------------------------------------------------------------------
 
-// Constant: no inputs, one Scalar output, state["value"] is the produced value.
-void constant_evaluate(Node& self, float /*dt*/, float /*elapsed*/, bool /*init_pass*/) {
-    self.outputs[0].current = self.state.at("value");
-}
-
-void register_constant() {
-    NodeType t;
-    t.name         = "Constant";
-    t.display_name = "Constant";
-    t.category     = "Generator";
-    t.outputs.push_back(SocketSpec{
-        "Value", ValueType::Scalar, SocketValue{Scalar{0.0f}}, std::nullopt
-    });
-    t.state_schema.push_back(StateKeySpec{
-        "value", ValueType::Scalar, SocketValue{Scalar{0.5f}}
-    });
-    t.evaluate = &constant_evaluate;
-    register_node_type(t);
-}
-
-// ConstantVec3: same idea but Vec3 — proves the variant carries vector types.
-void constant_vec3_evaluate(Node& self, float, float, bool) {
-    self.outputs[0].current = self.state.at("value");
-}
-
-void register_constant_vec3() {
-    NodeType t;
-    t.name         = "ConstantVec3";
-    t.display_name = "Constant Vec3";
-    t.category     = "Generator";
-    t.outputs.push_back(SocketSpec{
-        "Value", ValueType::Vec3, SocketValue{Vec3{0.0f, 0.0f, 0.0f}}, std::nullopt
-    });
-    t.state_schema.push_back(StateKeySpec{
-        "value", ValueType::Vec3, SocketValue{Vec3{1.0f, 0.5f, 0.25f}}
-    });
-    t.evaluate = &constant_vec3_evaluate;
-    register_node_type(t);
-}
-
 void adder_evaluate(Node& self, float, float, bool) {
     const Scalar input  = std::get<Scalar>(self.inputs[0].current);
     const Scalar offset = std::get<Scalar>(self.state.at("offset"));
@@ -126,8 +86,7 @@ void register_tick_counter() {
 #define PASS(msg) std::cout << "[PASS] " msg "\n"
 
 int test_register_and_find() {
-    register_constant();
-    register_constant_vec3();
+    register_builtin_node_types();
 
     const NodeType* c = find_node_type("Constant");
     CHECK(c != nullptr);
@@ -336,7 +295,7 @@ int test_graph_init_pass_does_not_advance_time_sensitive_state() {
 }
 
 int test_phase_node_advances_and_wraps() {
-    register_phase_node_type();
+    register_builtin_node_types();
 
     const NodeType* phase = find_node_type("Phase");
     CHECK(phase != nullptr);
