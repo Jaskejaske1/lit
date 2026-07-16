@@ -22,6 +22,12 @@ pkgs.mkShell {
   ];
 
   shellHook = ''
+    if git_root="$(${pkgs.git}/bin/git rev-parse --show-toplevel 2>/dev/null)"; then
+      export LIT_PROJECT_ROOT="$git_root"
+    else
+      export LIT_PROJECT_ROOT="$PWD"
+    fi
+
     nix_runtime_libs="$(
       printf '%s\n' "$NIX_LDFLAGS" \
         | tr ' ' '\n' \
@@ -38,10 +44,23 @@ pkgs.mkShell {
       export LD_LIBRARY_PATH="$graphics_libs''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
     fi
 
-    export LIT_BUILD_DIR="''${LIT_BUILD_DIR:-$PWD/cmake-build/linux}"
+    export LIT_BUILD_PROFILE="''${LIT_BUILD_PROFILE:-debug}"
+    export LIT_BUILD_DIR="''${LIT_BUILD_DIR:-$LIT_PROJECT_ROOT/cmake-build/linux}"
 
     lit_configure() {
-      cmake -S "$PWD" -B "$LIT_BUILD_DIR" -G Ninja -DCMAKE_BUILD_TYPE=''${1:-Debug}
+      local profile=''${1:-$LIT_BUILD_PROFILE}
+      local build_type
+
+      case "$profile" in
+        debug) build_type=Debug ;;
+        release) build_type=Release ;;
+        *)
+          echo "usage: lit_configure [debug|release]" >&2
+          return 1
+          ;;
+      esac
+
+      cmake -S "$LIT_PROJECT_ROOT" -B "$LIT_BUILD_DIR" -G Ninja -DCMAKE_BUILD_TYPE="$build_type"
     }
 
     lit_build() {
@@ -57,7 +76,9 @@ pkgs.mkShell {
     }
 
     echo "⚡ lit NixOS dev shell active"
+    echo "  project   : $LIT_PROJECT_ROOT"
     echo "  build dir : $LIT_BUILD_DIR"
+    echo "  profile   : $LIT_BUILD_PROFILE"
     echo "  commands  : lit_configure | lit_build | lit_test | lit_view"
   '';
 }

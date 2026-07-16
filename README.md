@@ -29,7 +29,16 @@ lit_view
 ```
 
 The shell exports the runtime linker paths needed for SDL, OpenGL, and the
-GUI prototype to start correctly on NixOS.
+GUI prototype to start correctly on NixOS. The helper commands anchor
+themselves to the repo root, so they still work if you `cd` around after
+entering the shell.
+
+Useful overrides:
+
+```bash
+LIT_BUILD_PROFILE=release nix-shell
+LIT_BUILD_DIR=/tmp/lit-debug nix-shell
+```
 
 If you want the raw CMake path, this is equivalent:
 
