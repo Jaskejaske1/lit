@@ -10,8 +10,10 @@
 // Toolchain: SDL3 + OpenGL 4.6 (CORE) + ImGui (SDL3 + OpenGL3 backends) + gl3w.
 // Validated by Phase 0, reused here with the new substrate on top.
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -139,9 +141,11 @@ struct App {
     int          destination_node_selection = 0;
     int          destination_input_selection = 0;
     std::string  last_graph_error;
+    std::optional<NodeId> pending_delete_node_id;
     double       last_tick_time = 0.0;
 
     void tick(float dt);
+    void delete_node(NodeId id);
 
     bool init();
     void run();
@@ -273,6 +277,23 @@ void App::spawn_node(const char* type_name) {
     }
 }
 
+void App::delete_node(NodeId id) {
+    graph.connections.erase(
+        std::remove_if(graph.connections.begin(), graph.connections.end(),
+                       [id](const Connection& connection) {
+                           return connection.source.node_id == id
+                               || connection.destination.node_id == id;
+                       }),
+        graph.connections.end());
+
+    graph.nodes.erase(
+        std::remove_if(graph.nodes.begin(), graph.nodes.end(),
+                       [id](const Node& node) { return node.id == id; }),
+        graph.nodes.end());
+
+    rebuild_graph(graph, &last_graph_error);
+}
+
 void App::draw_node(Node& n) {
     if (!ImGui::TreeNode(&n, "Node #%llu  '%s'  [%s]",
                          (unsigned long long)n.id,
@@ -283,6 +304,10 @@ void App::draw_node(Node& n) {
 
     ImGui::Text("Position: (%.1f, %.1f)", n.position[0], n.position[1]);
     ImGui::Checkbox("Bypass", &n.bypass);
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Delete Node")) {
+        pending_delete_node_id = n.id;
+    }
 
     if (!n.inputs.empty()) {
         if (ImGui::TreeNode("Inputs")) {
@@ -523,6 +548,11 @@ void App::draw_debug_panel() {
         for (auto& n : graph.nodes) {
             draw_node(n);
         }
+    }
+
+    if (pending_delete_node_id.has_value()) {
+        delete_node(*pending_delete_node_id);
+        pending_delete_node_id.reset();
     }
 
     ImGui::Separator();
