@@ -5,7 +5,8 @@ A node-graph-based lighting control engine. **Surface** for live busking (MA2-st
 ## Status
 
 - **Phase 0** (toolchain validation) — complete. SDL3 + ImGui + GL3W + OpenGL 4.6 GPU compute pipeline verified. Prototype code deleted; insights preserved.
-- **Phase 1+** (real substrate) — design phase. Implementation begins by deriving from the docs below.
+- **Phase 1.a** (substrate prototype baseline) — live. Registry, node instances, graph bake/topo order, init pass, and a real `Phase` generator now run on NixOS inside `lit_view`.
+- **Phase 1+** (real effect-building substrate) — still ahead. No visual graph editor, no real spatial preview, no packaged Intentions yet.
 
 ## Docs (read before any code change)
 
@@ -50,7 +51,8 @@ cmake --build cmake-build/linux
 Current prototype baseline:
 
 - `test_substrate` validates the substrate skeleton and registry behavior.
-- `lit_view` opens a debug console for the current substrate types.
+- `test_substrate` now also validates graph bake/topo order, init pass behavior, cycle rejection, and the built-in `Phase` node.
+- `lit_view` opens a debug console for the current substrate types, including a live `Phase` node whose output advances over time.
 
 This is still a prototype baseline, not the real Phase 1 engine. See
 [build quickstart](docs/engineering-patterns.txt) (top of file) for more.

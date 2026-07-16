@@ -335,6 +335,34 @@ int test_graph_init_pass_does_not_advance_time_sensitive_state() {
     return 0;
 }
 
+int test_phase_node_advances_and_wraps() {
+    register_phase_node_type();
+
+    const NodeType* phase = find_node_type("Phase");
+    CHECK(phase != nullptr);
+
+    Graph g;
+    g.nodes.push_back(make_node(*phase, 41, "Phase A"));
+
+    GraphBuildError err = g.bake();
+    CHECK(err.code == GraphBuildErrorCode::None);
+    CHECK(g.init_pass());
+
+    CHECK(std::get<Scalar>(g.find_node(41)->outputs[0].current) == 0.0f);
+    CHECK(std::get<Scalar>(g.find_node(41)->state["phase"]) == 0.0f);
+
+    CHECK(g.tick(0.5f));
+    CHECK(std::get<Scalar>(g.find_node(41)->outputs[0].current) == 0.25f);
+    CHECK(std::get<Scalar>(g.find_node(41)->state["phase"]) == 0.25f);
+
+    CHECK(g.tick(1.5f));
+    CHECK(std::get<Scalar>(g.find_node(41)->outputs[0].current) == 0.0f);
+    CHECK(std::get<Scalar>(g.find_node(41)->state["phase"]) == 0.0f);
+
+    PASS("Phase node advances by dt/period and wraps cleanly");
+    return 0;
+}
+
 // ----------------------------------------------------------------------------
 
 int main() {
@@ -350,6 +378,7 @@ int main() {
     rc |= test_graph_uses_default_input_when_disconnected();
     rc |= test_graph_rejects_cycles();
     rc |= test_graph_init_pass_does_not_advance_time_sensitive_state();
+    rc |= test_phase_node_advances_and_wraps();
 
     if (rc == 0) {
         std::cout << "\nAll substrate tests passed.\n";

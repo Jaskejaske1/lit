@@ -41,8 +41,8 @@ using namespace substrate;
 // ============================================================================
 // Demo node types
 // ============================================================================
-// Duplicated from tests/test_substrate.cpp. Premature to share — when the
-// substrate ships real Phase / Decay / etc., those live in the library.
+// Duplicated from tests/test_substrate.cpp. These are still demo-only; real
+// time-based primitives like Phase now live in the substrate library.
 
 void constant_evaluate(Node& self, float, float, bool) {
     self.outputs[0].current = self.state.at("value");
@@ -136,6 +136,7 @@ bool App::init() {
     // 1. Register demo node types into the substrate's global registry.
     register_constant_demo();
     register_constant_vec3_demo();
+    register_phase_node_type();
 
     // 2. SDL3
     if (!SDL_Init(SDL_INIT_VIDEO)) {
@@ -191,8 +192,8 @@ bool App::init() {
 
     // 8. Spawn a few demo nodes so the user sees something on first frame
     spawn_node("Constant");
+    spawn_node("Phase");
     spawn_node("ConstantVec3");
-    spawn_node("Constant");
 
     // 9. Seed the per-frame clock
     last_tick_time = (double)SDL_GetTicks() / 1000.0;
@@ -321,6 +322,8 @@ void App::draw_debug_panel() {
     if (ImGui::Button("Constant"))      spawn_node("Constant");
     ImGui::SameLine();
     if (ImGui::Button("Constant Vec3")) spawn_node("ConstantVec3");
+    ImGui::SameLine();
+    if (ImGui::Button("Phase"))         spawn_node("Phase");
 
     // Demo nodes
     ImGui::Separator();

@@ -44,7 +44,7 @@ Flat list of node types. No inheritance. Each entry:
   "display_name": "Phase",          // for UI
   "category": "Generator",          // for UI grouping (Generators / Modifiers / Outputs / etc.)
   "inputs": [
-    { "name": "Period", "type": "Float", "default": 60.0, "visible": true },
+    { "name": "Period", "type": "Float", "default": 2.0, "visible": true },   // seconds per cycle
     ...
   ],
   "outputs": [

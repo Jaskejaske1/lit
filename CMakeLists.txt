@@ -97,6 +97,7 @@ add_library(substrate STATIC
     src/substrate/socket.h
     src/substrate/node.h
     src/substrate/graph.h
+    src/substrate/builtins.h
     src/substrate/substrate.h
     src/substrate/substrate.cpp
 )
