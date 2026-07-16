@@ -18,12 +18,33 @@ The docs are the source of truth. **If code and docs disagree, fix the docs firs
 
 ## Build
 
+On NixOS, the canonical entrypoint is the project shell:
+
 ```bash
-cmake -B cmake-build -S .
-cmake --build cmake-build --config Debug
+nix-shell
+lit_configure
+lit_build
+lit_test
+lit_view
 ```
 
-Currently produces only the static dependency libraries (SDL3, ImGui, GL3W via CMake FetchContent). No substrate executable yet — that's Phase 1+ work. See [build quickstart](docs/engineering-patterns.txt) (top of file) for more.
+The shell exports the runtime linker paths needed for SDL, OpenGL, and the
+GUI prototype to start correctly on NixOS.
+
+If you want the raw CMake path, this is equivalent:
+
+```bash
+cmake -S . -B cmake-build/linux -G Ninja -DCMAKE_BUILD_TYPE=Debug
+cmake --build cmake-build/linux
+```
+
+Current prototype baseline:
+
+- `test_substrate` validates the substrate skeleton and registry behavior.
+- `lit_view` opens a debug console for the current substrate types.
+
+This is still a prototype baseline, not the real Phase 1 engine. See
+[build quickstart](docs/engineering-patterns.txt) (top of file) for more.
 
 ## Personal
 
