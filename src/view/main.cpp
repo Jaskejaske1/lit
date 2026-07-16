@@ -131,9 +131,15 @@ struct App {
     SDL_GLContext gl_context = nullptr;
     bool          running    = true;
 
-    Graph  graph;
-    NodeId next_id = 1;
-    double last_tick_time = 0.0;
+    Graph        graph;
+    NodeId       next_id = 1;
+    ConnectionId next_connection_id = 1;
+    int          source_node_selection = 0;
+    int          source_output_selection = 0;
+    int          destination_node_selection = 0;
+    int          destination_input_selection = 0;
+    std::string  last_graph_error;
+    double       last_tick_time = 0.0;
 
     void tick(float dt);
 
@@ -142,6 +148,7 @@ struct App {
     void shutdown();
 
     void draw_debug_panel();
+    void draw_connections_panel();
     void draw_node(Node& n);
     void spawn_node(const char* type_name);
 };
@@ -216,16 +223,18 @@ bool App::init() {
 void App::tick(float dt) {
     GraphBuildError err;
     if (!graph.tick(dt, &err)) {
-        fprintf(stderr, "Graph tick failed: %.*s\n",
-                (int)graph_build_error_name(err.code).size(),
-                graph_build_error_name(err.code).data());
+        last_graph_error = std::string(graph_build_error_name(err.code));
+        fprintf(stderr, "Graph tick failed: %s\n", last_graph_error.c_str());
         running = false;
     }
 }
 
-static bool rebuild_graph(Graph& graph) {
+static bool rebuild_graph(Graph& graph, std::string* error_text = nullptr) {
     GraphBuildError err = graph.bake();
     if (err.code != GraphBuildErrorCode::None) {
+        if (error_text) {
+            *error_text = std::string(graph_build_error_name(err.code));
+        }
         fprintf(stderr, "Graph bake failed: %.*s\n",
                 (int)graph_build_error_name(err.code).size(),
                 graph_build_error_name(err.code).data());
@@ -233,10 +242,17 @@ static bool rebuild_graph(Graph& graph) {
     }
 
     if (!graph.init_pass(&err)) {
+        if (error_text) {
+            *error_text = std::string(graph_build_error_name(err.code));
+        }
         fprintf(stderr, "Graph init pass failed: %.*s\n",
                 (int)graph_build_error_name(err.code).size(),
                 graph_build_error_name(err.code).data());
         return false;
+    }
+
+    if (error_text) {
+        error_text->clear();
     }
     return true;
 }
@@ -250,7 +266,7 @@ void App::spawn_node(const char* type_name) {
     std::string instance_name = std::string(type_name) + " #" + std::to_string(next_id);
     graph.nodes.push_back(make_node(*t, next_id++, instance_name));
 
-    if (!rebuild_graph(graph)) {
+    if (!rebuild_graph(graph, &last_graph_error)) {
         fprintf(stderr, "spawn_node: graph rebuild failed after adding '%s'\n", type_name);
         running = false;
     }
@@ -325,6 +341,152 @@ void App::draw_node(Node& n) {
     ImGui::TreePop();
 }
 
+void App::draw_connections_panel() {
+    if (!ImGui::CollapsingHeader("Connections", ImGuiTreeNodeFlags_DefaultOpen)) {
+        return;
+    }
+
+    ImGui::Text("Count: %zu", graph.connections.size());
+    if (!last_graph_error.empty()) {
+        ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.45f, 1.0f), "Last graph error: %s", last_graph_error.c_str());
+    }
+
+    for (std::size_t i = 0; i < graph.connections.size(); ++i) {
+        const auto& connection = graph.connections[i];
+        const Node* src_node = graph.find_node(connection.source.node_id);
+        const Node* dst_node = graph.find_node(connection.destination.node_id);
+        const char* src_socket = (src_node && connection.source.socket_index < src_node->outputs.size())
+            ? src_node->outputs[connection.source.socket_index].name.c_str()
+            : "?";
+        const char* dst_socket = (dst_node && connection.destination.socket_index < dst_node->inputs.size())
+            ? dst_node->inputs[connection.destination.socket_index].name.c_str()
+            : "?";
+
+        ImGui::PushID((int)connection.id);
+        ImGui::Text("#%llu  %s.%s -> %s.%s",
+                    (unsigned long long)connection.id,
+                    src_node ? src_node->name.c_str() : "?",
+                    src_socket,
+                    dst_node ? dst_node->name.c_str() : "?",
+                    dst_socket);
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Remove")) {
+            graph.connections.erase(graph.connections.begin() + (long)i);
+            rebuild_graph(graph, &last_graph_error);
+            ImGui::PopID();
+            return;
+        }
+        ImGui::PopID();
+    }
+
+    std::vector<int> source_nodes;
+    std::vector<int> destination_nodes;
+    for (std::size_t i = 0; i < graph.nodes.size(); ++i) {
+        if (!graph.nodes[i].outputs.empty()) {
+            source_nodes.push_back((int)i);
+        }
+        if (!graph.nodes[i].inputs.empty()) {
+            destination_nodes.push_back((int)i);
+        }
+    }
+
+    if (source_nodes.empty() || destination_nodes.empty()) {
+        ImGui::TextUnformatted("Need at least one source node with outputs and one destination node with inputs.");
+        return;
+    }
+
+    if (source_node_selection >= (int)source_nodes.size()) {
+        source_node_selection = 0;
+    }
+    if (destination_node_selection >= (int)destination_nodes.size()) {
+        destination_node_selection = 0;
+    }
+
+    Node& source_node = graph.nodes[(std::size_t)source_nodes[(std::size_t)source_node_selection]];
+    Node& destination_node = graph.nodes[(std::size_t)destination_nodes[(std::size_t)destination_node_selection]];
+
+    if (source_output_selection >= (int)source_node.outputs.size()) {
+        source_output_selection = 0;
+    }
+    if (destination_input_selection >= (int)destination_node.inputs.size()) {
+        destination_input_selection = 0;
+    }
+
+    if (ImGui::BeginCombo("Source Node", source_node.name.c_str())) {
+        for (std::size_t i = 0; i < source_nodes.size(); ++i) {
+            const bool selected = ((int)i == source_node_selection);
+            const auto& node = graph.nodes[(std::size_t)source_nodes[i]];
+            if (ImGui::Selectable(node.name.c_str(), selected)) {
+                source_node_selection = (int)i;
+                source_output_selection = 0;
+            }
+            if (selected) {
+                ImGui::SetItemDefaultFocus();
+            }
+        }
+        ImGui::EndCombo();
+    }
+
+    if (ImGui::BeginCombo("Source Output", source_node.outputs[(std::size_t)source_output_selection].name.c_str())) {
+        for (std::size_t i = 0; i < source_node.outputs.size(); ++i) {
+            const bool selected = ((int)i == source_output_selection);
+            if (ImGui::Selectable(source_node.outputs[i].name.c_str(), selected)) {
+                source_output_selection = (int)i;
+            }
+            if (selected) {
+                ImGui::SetItemDefaultFocus();
+            }
+        }
+        ImGui::EndCombo();
+    }
+
+    if (ImGui::BeginCombo("Destination Node", destination_node.name.c_str())) {
+        for (std::size_t i = 0; i < destination_nodes.size(); ++i) {
+            const bool selected = ((int)i == destination_node_selection);
+            const auto& node = graph.nodes[(std::size_t)destination_nodes[i]];
+            if (ImGui::Selectable(node.name.c_str(), selected)) {
+                destination_node_selection = (int)i;
+                destination_input_selection = 0;
+            }
+            if (selected) {
+                ImGui::SetItemDefaultFocus();
+            }
+        }
+        ImGui::EndCombo();
+    }
+
+    if (ImGui::BeginCombo("Destination Input", destination_node.inputs[(std::size_t)destination_input_selection].name.c_str())) {
+        for (std::size_t i = 0; i < destination_node.inputs.size(); ++i) {
+            const bool selected = ((int)i == destination_input_selection);
+            if (ImGui::Selectable(destination_node.inputs[i].name.c_str(), selected)) {
+                destination_input_selection = (int)i;
+            }
+            if (selected) {
+                ImGui::SetItemDefaultFocus();
+            }
+        }
+        ImGui::EndCombo();
+    }
+
+    if (ImGui::Button("Add Connection")) {
+        const Connection connection{
+            next_connection_id++,
+            { source_node.id, (std::size_t)source_output_selection },
+            { destination_node.id, (std::size_t)destination_input_selection },
+        };
+
+        graph.connections.push_back(connection);
+        std::string failure_text;
+        if (!rebuild_graph(graph, &failure_text)) {
+            graph.connections.pop_back();
+            rebuild_graph(graph, nullptr);
+            last_graph_error = failure_text;
+        } else {
+            last_graph_error.clear();
+        }
+    }
+}
+
 void App::draw_debug_panel() {
     ImGui::Begin("lit_view - Substrate Dev Console");
 
@@ -347,6 +509,9 @@ void App::draw_debug_panel() {
     if (ImGui::Button("Constant Vec3")) spawn_node("ConstantVec3");
     ImGui::SameLine();
     if (ImGui::Button("Phase"))         spawn_node("Phase");
+
+    ImGui::Separator();
+    draw_connections_panel();
 
     // Demo nodes
     ImGui::Separator();

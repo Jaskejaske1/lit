@@ -269,6 +269,26 @@ int test_graph_rejects_cycles() {
     return 0;
 }
 
+int test_graph_rejects_multiple_sources_to_one_input() {
+    const NodeType* c = find_node_type("Constant");
+    const NodeType* a = find_node_type("Adder");
+    CHECK(c != nullptr);
+    CHECK(a != nullptr);
+
+    Graph g;
+    g.nodes.push_back(make_node(*c, 51, "Const A"));
+    g.nodes.push_back(make_node(*c, 52, "Const B"));
+    g.nodes.push_back(make_node(*a, 53, "Adder"));
+    g.connections.push_back(Connection{1, {51, 0}, {53, 0}});
+    g.connections.push_back(Connection{2, {52, 0}, {53, 0}});
+
+    GraphBuildError err = g.bake();
+    CHECK(err.code == GraphBuildErrorCode::DestinationAlreadyConnected);
+
+    PASS("Graph rejects multiple source connections into one input socket");
+    return 0;
+}
+
 int test_graph_init_pass_does_not_advance_time_sensitive_state() {
     register_tick_counter();
 
@@ -336,6 +356,7 @@ int main() {
     rc |= test_graph_propagates_connections_in_topological_order();
     rc |= test_graph_uses_default_input_when_disconnected();
     rc |= test_graph_rejects_cycles();
+    rc |= test_graph_rejects_multiple_sources_to_one_input();
     rc |= test_graph_init_pass_does_not_advance_time_sensitive_state();
     rc |= test_phase_node_advances_and_wraps();
 

@@ -49,6 +49,7 @@ enum class GraphBuildErrorCode : uint8_t {
     DestinationSocketOutOfRange,
     SourceSocketNotOutput,
     DestinationSocketNotInput,
+    DestinationAlreadyConnected,
     TypeMismatch,
     CycleDetected,
 };
@@ -70,6 +71,7 @@ inline std::string_view graph_build_error_name(GraphBuildErrorCode code) {
         case GraphBuildErrorCode::DestinationSocketOutOfRange: return "DestinationSocketOutOfRange";
         case GraphBuildErrorCode::SourceSocketNotOutput: return "SourceSocketNotOutput";
         case GraphBuildErrorCode::DestinationSocketNotInput: return "DestinationSocketNotInput";
+        case GraphBuildErrorCode::DestinationAlreadyConnected: return "DestinationAlreadyConnected";
         case GraphBuildErrorCode::TypeMismatch: return "TypeMismatch";
         case GraphBuildErrorCode::CycleDetected: return "CycleDetected";
     }
@@ -129,6 +131,10 @@ struct Graph {
         incoming_connection_indices.assign(nodes.size(), {});
         std::vector<std::vector<std::size_t>> outgoing_connection_indices(nodes.size());
         std::vector<std::size_t> indegree(nodes.size(), 0);
+        std::unordered_map<NodeId, std::vector<bool>> destination_inputs_used;
+        for (const auto& node : nodes) {
+            destination_inputs_used.emplace(node.id, std::vector<bool>(node.inputs.size(), false));
+        }
 
         for (std::size_t i = 0; i < connections.size(); ++i) {
             const auto& connection = connections[i];
@@ -190,6 +196,15 @@ struct Graph {
                     .endpoint = connection.destination,
                 };
             }
+
+            if (destination_inputs_used[dst_node.id][connection.destination.socket_index]) {
+                return GraphBuildError{
+                    .code = GraphBuildErrorCode::DestinationAlreadyConnected,
+                    .connection_id = connection.id,
+                    .endpoint = connection.destination,
+                };
+            }
+            destination_inputs_used[dst_node.id][connection.destination.socket_index] = true;
 
             if (src_socket.type != dst_socket.type) {
                 return GraphBuildError{
