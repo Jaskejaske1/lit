@@ -88,7 +88,7 @@ target_link_libraries(imgui PUBLIC gl3w_loader SDL3::SDL3)
 # ============================================================================
 # Substrate — the core library (Phase 1+)
 # ============================================================================
-# Header-only for v0: type system, sockets, nodes, registry.
+# Header-only for v0: type system, sockets, nodes, graph core, registry.
 # All other targets (tests, executables) link against `substrate` and
 # include <substrate/substrate.h>.
 
@@ -96,6 +96,7 @@ add_library(substrate STATIC
     src/substrate/value.h
     src/substrate/socket.h
     src/substrate/node.h
+    src/substrate/graph.h
     src/substrate/substrate.h
     src/substrate/substrate.cpp
 )
@@ -112,8 +113,7 @@ target_link_libraries(test_substrate PRIVATE substrate)
 # lit_view — substrate dev console (Phase 1.a, the seed of the Builder binary)
 # ============================================================================
 # Minimum host shell: window + OpenGL 4.6 + ImGui + a debug panel that
-# inspects the substrate's data model. No graph eval yet — that lands with
-# Connection + Graph in the next step.
+# inspects the substrate's data model and ticks a real Graph.
 
 add_executable(lit_view src/view/main.cpp)
 target_link_libraries(lit_view PRIVATE substrate imgui)

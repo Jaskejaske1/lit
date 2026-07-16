@@ -1,8 +1,7 @@
 // lit_view — substrate dev console (Phase 1.a)
 //
 // Minimum host shell: window + OpenGL 4.6 + ImGui + a debug panel that
-// inspects the substrate's data model. No graph eval yet — that lands
-// with Connection + Graph in the next step.
+// inspects the substrate's data model while ticking a real Graph.
 //
 // This is the seed of the eventual Builder binary. For now it's a visual
 // substrate debugger: you can see registered types, spawn demo nodes,
@@ -118,15 +117,9 @@ struct App {
     SDL_GLContext gl_context = nullptr;
     bool          running    = true;
 
-    std::vector<Node> nodes;
-    NodeId            next_id = 1;
-
-    // Per-frame tick state. Placeholder until Connection + Graph lands —
-    // for now we drive each node's evaluate() directly so the Output values
-    // actually reflect State (currently identical for Constant types; will
-    // get interesting once Phase / Decay / etc. exist).
+    Graph  graph;
+    NodeId next_id = 1;
     double last_tick_time = 0.0;
-    double elapsed        = 0.0;
 
     void tick(float dt);
 
@@ -208,14 +201,31 @@ bool App::init() {
 }
 
 void App::tick(float dt) {
-    // Placeholder eval loop — runs every node's evaluate() in registration
-    // order. Will be replaced by Graph::tick() once Connection + Graph land.
-    // Bypass is honored here so a node can be muted from the host too.
-    for (auto& n : nodes) {
-        if (n.type && n.type->evaluate && !n.bypass) {
-            n.type->evaluate(n, dt, (float)elapsed, /*init_pass=*/false);
-        }
+    GraphBuildError err;
+    if (!graph.tick(dt, &err)) {
+        fprintf(stderr, "Graph tick failed: %.*s\n",
+                (int)graph_build_error_name(err.code).size(),
+                graph_build_error_name(err.code).data());
+        running = false;
     }
+}
+
+static bool rebuild_graph(Graph& graph) {
+    GraphBuildError err = graph.bake();
+    if (err.code != GraphBuildErrorCode::None) {
+        fprintf(stderr, "Graph bake failed: %.*s\n",
+                (int)graph_build_error_name(err.code).size(),
+                graph_build_error_name(err.code).data());
+        return false;
+    }
+
+    if (!graph.init_pass(&err)) {
+        fprintf(stderr, "Graph init pass failed: %.*s\n",
+                (int)graph_build_error_name(err.code).size(),
+                graph_build_error_name(err.code).data());
+        return false;
+    }
+    return true;
 }
 
 void App::spawn_node(const char* type_name) {
@@ -225,7 +235,12 @@ void App::spawn_node(const char* type_name) {
         return;
     }
     std::string instance_name = std::string(type_name) + " #" + std::to_string(next_id);
-    nodes.push_back(make_node(*t, next_id++, instance_name));
+    graph.nodes.push_back(make_node(*t, next_id++, instance_name));
+
+    if (!rebuild_graph(graph)) {
+        fprintf(stderr, "spawn_node: graph rebuild failed after adding '%s'\n", type_name);
+        running = false;
+    }
 }
 
 void App::draw_node(Node& n) {
@@ -310,15 +325,18 @@ void App::draw_debug_panel() {
     // Demo nodes
     ImGui::Separator();
     if (ImGui::CollapsingHeader("Nodes", ImGuiTreeNodeFlags_DefaultOpen)) {
-        ImGui::Text("Count: %zu", nodes.size());
-        for (auto& n : nodes) {
+        ImGui::Text("Count: %zu", graph.nodes.size());
+        for (auto& n : graph.nodes) {
             draw_node(n);
         }
     }
 
     ImGui::Separator();
     ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
-    ImGui::Text("Elapsed: %.3f s", elapsed);
+    ImGui::Text("Elapsed: %.3f s", graph.elapsed_seconds);
+    ImGui::Text("Bake state: %s", graph.bake_state == GraphBakeState::Baked ? "Baked" : "Editing");
+    ImGui::Text("Connections: %zu", graph.connections.size());
+    ImGui::Text("Eval order nodes: %zu", graph.evaluation_order.size());
     ImGui::Text("Press ESC to quit.");
     ImGui::End();
 }
@@ -333,11 +351,10 @@ void App::run() {
             if (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED) running = false;
         }
 
-        // Compute dt, accumulate elapsed, tick the substrate.
+        // Compute dt and tick the substrate graph.
         double now = (double)SDL_GetTicks() / 1000.0;
         float  dt  = (float)(now - last_tick_time);
         last_tick_time = now;
-        elapsed += dt;
         if (dt > 0.0f) {
             tick(dt);
         }

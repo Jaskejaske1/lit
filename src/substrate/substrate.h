@@ -9,3 +9,4 @@
 #include "value.h"
 #include "socket.h"
 #include "node.h"
+#include "graph.h"

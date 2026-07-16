@@ -64,6 +64,54 @@ void register_constant_vec3() {
     register_node_type(t);
 }
 
+void adder_evaluate(Node& self, float, float, bool) {
+    const Scalar input  = std::get<Scalar>(self.inputs[0].current);
+    const Scalar offset = std::get<Scalar>(self.state.at("offset"));
+    self.outputs[0].current = SocketValue{input + offset};
+}
+
+void register_adder() {
+    NodeType t;
+    t.name         = "Adder";
+    t.display_name = "Adder";
+    t.category     = "Modifier";
+    t.inputs.push_back(SocketSpec{
+        "In", ValueType::Scalar, SocketValue{Scalar{1.0f}}, std::nullopt
+    });
+    t.outputs.push_back(SocketSpec{
+        "Out", ValueType::Scalar, SocketValue{Scalar{0.0f}}, std::nullopt
+    });
+    t.state_schema.push_back(StateKeySpec{
+        "offset", ValueType::Scalar, SocketValue{Scalar{0.25f}}
+    });
+    t.evaluate = &adder_evaluate;
+    register_node_type(t);
+}
+
+void tick_counter_evaluate(Node& self, float, float, bool init_pass) {
+    Scalar ticks = std::get<Scalar>(self.state.at("ticks"));
+    if (!init_pass) {
+        ticks += 1.0f;
+        self.state["ticks"] = SocketValue{ticks};
+    }
+    self.outputs[0].current = SocketValue{ticks};
+}
+
+void register_tick_counter() {
+    NodeType t;
+    t.name         = "TickCounter";
+    t.display_name = "Tick Counter";
+    t.category     = "Generator";
+    t.outputs.push_back(SocketSpec{
+        "Ticks", ValueType::Scalar, SocketValue{Scalar{0.0f}}, std::nullopt
+    });
+    t.state_schema.push_back(StateKeySpec{
+        "ticks", ValueType::Scalar, SocketValue{Scalar{0.0f}}
+    });
+    t.evaluate = &tick_counter_evaluate;
+    register_node_type(t);
+}
+
 // ----------------------------------------------------------------------------
 // Tests
 // ----------------------------------------------------------------------------
@@ -176,11 +224,114 @@ int test_vec3_through_variant() {
 
 int test_all_node_types() {
     const auto& all = all_node_types();
-    CHECK(all.size() == 2);
+    CHECK(all.size() >= 2);
     CHECK(all.count("Constant") == 1);
     CHECK(all.count("ConstantVec3") == 1);
 
     PASS("all_node_types() enumerates registry");
+    return 0;
+}
+
+int test_graph_propagates_connections_in_topological_order() {
+    register_adder();
+
+    const NodeType* c = find_node_type("Constant");
+    const NodeType* a = find_node_type("Adder");
+    CHECK(c != nullptr);
+    CHECK(a != nullptr);
+
+    Graph g;
+
+    Node source = make_node(*c, 1, "Const");
+    source.state["value"] = SocketValue{Scalar{0.5f}};
+
+    Node mid = make_node(*a, 2, "Adder A");
+    mid.state["offset"] = SocketValue{Scalar{1.0f}};
+
+    Node sink = make_node(*a, 3, "Adder B");
+    sink.state["offset"] = SocketValue{Scalar{2.0f}};
+
+    g.nodes.push_back(source);
+    g.nodes.push_back(mid);
+    g.nodes.push_back(sink);
+    g.connections.push_back(Connection{1, {1, 0}, {2, 0}});
+    g.connections.push_back(Connection{2, {2, 0}, {3, 0}});
+
+    GraphBuildError err = g.bake();
+    CHECK(err.code == GraphBuildErrorCode::None);
+    CHECK(g.evaluation_order.size() == 3);
+    CHECK(g.init_pass());
+
+    CHECK(std::get<Scalar>(g.find_node(1)->outputs[0].current) == 0.5f);
+    CHECK(std::get<Scalar>(g.find_node(2)->inputs[0].current) == 0.5f);
+    CHECK(std::get<Scalar>(g.find_node(2)->outputs[0].current) == 1.5f);
+    CHECK(std::get<Scalar>(g.find_node(3)->inputs[0].current) == 1.5f);
+    CHECK(std::get<Scalar>(g.find_node(3)->outputs[0].current) == 3.5f);
+
+    CHECK(g.tick(0.016f));
+    CHECK(std::get<Scalar>(g.find_node(3)->outputs[0].current) == 3.5f);
+
+    PASS("Graph bakes stable topo order and propagates connection values");
+    return 0;
+}
+
+int test_graph_uses_default_input_when_disconnected() {
+    const NodeType* a = find_node_type("Adder");
+    CHECK(a != nullptr);
+
+    Graph g;
+    g.nodes.push_back(make_node(*a, 11, "Adder Solo"));
+
+    GraphBuildError err = g.bake();
+    CHECK(err.code == GraphBuildErrorCode::None);
+    CHECK(g.init_pass());
+
+    CHECK(std::get<Scalar>(g.find_node(11)->inputs[0].current) == 1.0f);
+    CHECK(std::get<Scalar>(g.find_node(11)->outputs[0].current) == 1.25f);
+
+    PASS("Graph leaves disconnected inputs on their default value");
+    return 0;
+}
+
+int test_graph_rejects_cycles() {
+    const NodeType* a = find_node_type("Adder");
+    CHECK(a != nullptr);
+
+    Graph g;
+    g.nodes.push_back(make_node(*a, 21, "Adder A"));
+    g.nodes.push_back(make_node(*a, 22, "Adder B"));
+    g.connections.push_back(Connection{1, {21, 0}, {22, 0}});
+    g.connections.push_back(Connection{2, {22, 0}, {21, 0}});
+
+    GraphBuildError err = g.bake();
+    CHECK(err.code == GraphBuildErrorCode::CycleDetected);
+
+    PASS("Graph rejects cyclic topologies at bake time");
+    return 0;
+}
+
+int test_graph_init_pass_does_not_advance_time_sensitive_state() {
+    register_tick_counter();
+
+    const NodeType* counter = find_node_type("TickCounter");
+    CHECK(counter != nullptr);
+
+    Graph g;
+    g.nodes.push_back(make_node(*counter, 31, "Counter"));
+
+    GraphBuildError err = g.bake();
+    CHECK(err.code == GraphBuildErrorCode::None);
+    CHECK(g.init_pass());
+
+    CHECK(std::get<Scalar>(g.find_node(31)->state["ticks"]) == 0.0f);
+    CHECK(std::get<Scalar>(g.find_node(31)->outputs[0].current) == 0.0f);
+
+    CHECK(g.tick(0.016f));
+    CHECK(std::get<Scalar>(g.find_node(31)->state["ticks"]) == 1.0f);
+    CHECK(std::get<Scalar>(g.find_node(31)->outputs[0].current) == 1.0f);
+    CHECK(g.elapsed_seconds > 0.0f);
+
+    PASS("Graph init_pass seeds outputs without advancing time-sensitive state");
     return 0;
 }
 
@@ -195,6 +346,10 @@ int main() {
     rc |= test_evaluate_writes_output();
     rc |= test_vec3_through_variant();
     rc |= test_all_node_types();
+    rc |= test_graph_propagates_connections_in_topological_order();
+    rc |= test_graph_uses_default_input_when_disconnected();
+    rc |= test_graph_rejects_cycles();
+    rc |= test_graph_init_pass_does_not_advance_time_sensitive_state();
 
     if (rc == 0) {
         std::cout << "\nAll substrate tests passed.\n";
