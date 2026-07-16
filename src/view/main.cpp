@@ -212,6 +212,7 @@ bool App::init() {
     // 8. Spawn a few demo nodes so the user sees something on first frame
     spawn_node("Constant");
     spawn_node("Phase");
+    spawn_node("Add");
     spawn_node("ConstantVec3");
 
     // 9. Seed the per-frame clock
@@ -509,6 +510,8 @@ void App::draw_debug_panel() {
     if (ImGui::Button("Constant Vec3")) spawn_node("ConstantVec3");
     ImGui::SameLine();
     if (ImGui::Button("Phase"))         spawn_node("Phase");
+    ImGui::SameLine();
+    if (ImGui::Button("Add"))           spawn_node("Add");
 
     ImGui::Separator();
     draw_connections_panel();

@@ -24,30 +24,6 @@ using namespace substrate;
 // Test types
 // ----------------------------------------------------------------------------
 
-void adder_evaluate(Node& self, float, float, bool) {
-    const Scalar input  = std::get<Scalar>(self.inputs[0].current);
-    const Scalar offset = std::get<Scalar>(self.state.at("offset"));
-    self.outputs[0].current = SocketValue{input + offset};
-}
-
-void register_adder() {
-    NodeType t;
-    t.name         = "Adder";
-    t.display_name = "Adder";
-    t.category     = "Modifier";
-    t.inputs.push_back(SocketSpec{
-        "In", ValueType::Scalar, SocketValue{Scalar{1.0f}}, std::nullopt
-    });
-    t.outputs.push_back(SocketSpec{
-        "Out", ValueType::Scalar, SocketValue{Scalar{0.0f}}, std::nullopt
-    });
-    t.state_schema.push_back(StateKeySpec{
-        "offset", ValueType::Scalar, SocketValue{Scalar{0.25f}}
-    });
-    t.evaluate = &adder_evaluate;
-    register_node_type(t);
-}
-
 void tick_counter_evaluate(Node& self, float, float, bool init_pass) {
     Scalar ticks = std::get<Scalar>(self.state.at("ticks"));
     if (!init_pass) {
@@ -192,10 +168,8 @@ int test_all_node_types() {
 }
 
 int test_graph_propagates_connections_in_topological_order() {
-    register_adder();
-
     const NodeType* c = find_node_type("Constant");
-    const NodeType* a = find_node_type("Adder");
+    const NodeType* a = find_node_type("Add");
     CHECK(c != nullptr);
     CHECK(a != nullptr);
 
@@ -204,11 +178,13 @@ int test_graph_propagates_connections_in_topological_order() {
     Node source = make_node(*c, 1, "Const");
     source.state["value"] = SocketValue{Scalar{0.5f}};
 
-    Node mid = make_node(*a, 2, "Adder A");
-    mid.state["offset"] = SocketValue{Scalar{1.0f}};
+    Node mid = make_node(*a, 2, "Add A");
+    mid.inputs[1].default_value = SocketValue{Scalar{1.0f}};
+    mid.inputs[1].current = SocketValue{Scalar{1.0f}};
 
-    Node sink = make_node(*a, 3, "Adder B");
-    sink.state["offset"] = SocketValue{Scalar{2.0f}};
+    Node sink = make_node(*a, 3, "Add B");
+    sink.inputs[1].default_value = SocketValue{Scalar{2.0f}};
+    sink.inputs[1].current = SocketValue{Scalar{2.0f}};
 
     g.nodes.push_back(source);
     g.nodes.push_back(mid);
@@ -235,11 +211,16 @@ int test_graph_propagates_connections_in_topological_order() {
 }
 
 int test_graph_uses_default_input_when_disconnected() {
-    const NodeType* a = find_node_type("Adder");
+    const NodeType* a = find_node_type("Add");
     CHECK(a != nullptr);
 
     Graph g;
-    g.nodes.push_back(make_node(*a, 11, "Adder Solo"));
+    Node add = make_node(*a, 11, "Add Solo");
+    add.inputs[0].default_value = SocketValue{Scalar{1.0f}};
+    add.inputs[0].current = SocketValue{Scalar{1.0f}};
+    add.inputs[1].default_value = SocketValue{Scalar{0.25f}};
+    add.inputs[1].current = SocketValue{Scalar{0.25f}};
+    g.nodes.push_back(add);
 
     GraphBuildError err = g.bake();
     CHECK(err.code == GraphBuildErrorCode::None);
@@ -253,12 +234,12 @@ int test_graph_uses_default_input_when_disconnected() {
 }
 
 int test_graph_rejects_cycles() {
-    const NodeType* a = find_node_type("Adder");
+    const NodeType* a = find_node_type("Add");
     CHECK(a != nullptr);
 
     Graph g;
-    g.nodes.push_back(make_node(*a, 21, "Adder A"));
-    g.nodes.push_back(make_node(*a, 22, "Adder B"));
+    g.nodes.push_back(make_node(*a, 21, "Add A"));
+    g.nodes.push_back(make_node(*a, 22, "Add B"));
     g.connections.push_back(Connection{1, {21, 0}, {22, 0}});
     g.connections.push_back(Connection{2, {22, 0}, {21, 0}});
 
@@ -271,14 +252,14 @@ int test_graph_rejects_cycles() {
 
 int test_graph_rejects_multiple_sources_to_one_input() {
     const NodeType* c = find_node_type("Constant");
-    const NodeType* a = find_node_type("Adder");
+    const NodeType* a = find_node_type("Add");
     CHECK(c != nullptr);
     CHECK(a != nullptr);
 
     Graph g;
     g.nodes.push_back(make_node(*c, 51, "Const A"));
     g.nodes.push_back(make_node(*c, 52, "Const B"));
-    g.nodes.push_back(make_node(*a, 53, "Adder"));
+    g.nodes.push_back(make_node(*a, 53, "Add"));
     g.connections.push_back(Connection{1, {51, 0}, {53, 0}});
     g.connections.push_back(Connection{2, {52, 0}, {53, 0}});
 

@@ -66,6 +66,12 @@ inline void phase_evaluate(Node& self, float dt, float, bool init_pass) {
     self.outputs[0].current = SocketValue{phase};
 }
 
+inline void add_evaluate(Node& self, float, float, bool) {
+    const Scalar a = std::get<Scalar>(self.inputs[0].current);
+    const Scalar b = std::get<Scalar>(self.inputs[1].current);
+    self.outputs[0].current = SocketValue{a + b};
+}
+
 inline void register_phase_node_type() {
     NodeType t;
     t.name         = "Phase";
@@ -84,10 +90,29 @@ inline void register_phase_node_type() {
     register_node_type(t);
 }
 
+inline void register_add_node_type() {
+    NodeType t;
+    t.name         = "Add";
+    t.display_name = "Add";
+    t.category     = "Modifier";
+    t.inputs.push_back(SocketSpec{
+        "A", ValueType::Scalar, SocketValue{Scalar{0.0f}}, std::nullopt
+    });
+    t.inputs.push_back(SocketSpec{
+        "B", ValueType::Scalar, SocketValue{Scalar{0.0f}}, std::nullopt
+    });
+    t.outputs.push_back(SocketSpec{
+        "Sum", ValueType::Scalar, SocketValue{Scalar{0.0f}}, std::nullopt
+    });
+    t.evaluate = &add_evaluate;
+    register_node_type(t);
+}
+
 inline void register_builtin_node_types() {
     register_constant_node_type();
     register_constant_vec3_node_type();
     register_phase_node_type();
+    register_add_node_type();
 }
 
 }  // namespace substrate
