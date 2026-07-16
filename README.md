@@ -53,6 +53,7 @@ Current prototype baseline:
 - `test_substrate` validates the substrate skeleton and registry behavior.
 - `test_substrate` now also validates graph bake/topo order, init pass behavior, cycle rejection, and the built-in `Phase` node.
 - `lit_view` opens a debug console for the current substrate types, including a live `Phase` node whose output advances over time.
+- `lit_view` also lets you tweak disconnected input sockets and node state live, so the current prototype is a real substrate workbench rather than a read-only inspector.
 
 This is still a prototype baseline, not the real Phase 1 engine. See
 [build quickstart](docs/engineering-patterns.txt) (top of file) for more.

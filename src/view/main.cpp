@@ -72,6 +72,56 @@ const char* value_type_name(ValueType t) {
     return "?";
 }
 
+bool edit_value_widget(const char* label,
+                       ValueType type,
+                       SocketValue& value,
+                       const std::optional<std::pair<float, float>>& range = std::nullopt) {
+    switch (type) {
+        case ValueType::Scalar: {
+            float scalar = std::get<Scalar>(value);
+            bool changed = range
+                ? ImGui::SliderFloat(label, &scalar, range->first, range->second)
+                : ImGui::DragFloat(label, &scalar, 0.01f);
+            if (changed) {
+                value = SocketValue{scalar};
+            }
+            return changed;
+        }
+
+        case ValueType::Vec2: {
+            Vec2 vec = std::get<Vec2>(value);
+            float data[2] = { vec[0], vec[1] };
+            if (ImGui::DragFloat2(label, data, 0.01f)) {
+                value = SocketValue{Vec2{data[0], data[1]}};
+                return true;
+            }
+            return false;
+        }
+
+        case ValueType::Vec3: {
+            Vec3 vec = std::get<Vec3>(value);
+            float data[3] = { vec[0], vec[1], vec[2] };
+            if (ImGui::DragFloat3(label, data, 0.01f)) {
+                value = SocketValue{Vec3{data[0], data[1], data[2]}};
+                return true;
+            }
+            return false;
+        }
+
+        case ValueType::Vec4: {
+            Vec4 vec = std::get<Vec4>(value);
+            float data[4] = { vec[0], vec[1], vec[2], vec[3] };
+            if (ImGui::DragFloat4(label, data, 0.01f)) {
+                value = SocketValue{Vec4{data[0], data[1], data[2], data[3]}};
+                return true;
+            }
+            return false;
+        }
+    }
+
+    return false;
+}
+
 // ============================================================================
 // Application
 // ============================================================================
@@ -215,15 +265,21 @@ void App::draw_node(Node& n) {
     }
 
     ImGui::Text("Position: (%.1f, %.1f)", n.position[0], n.position[1]);
-    ImGui::Text("Bypass:   %s", n.bypass ? "true" : "false");
+    ImGui::Checkbox("Bypass", &n.bypass);
 
     if (!n.inputs.empty()) {
         if (ImGui::TreeNode("Inputs")) {
             for (size_t i = 0; i < n.inputs.size(); ++i) {
-                const Socket& s = n.inputs[i];
-                ImGui::BulletText("[%zu] %-12s %-6s = %s",
-                                  i, s.name.c_str(), value_type_name(s.type),
-                                  format_value(s.current).c_str());
+                Socket& s = n.inputs[i];
+                ImGui::PushID((int)i);
+                ImGui::Text("[%zu] %s (%s)", i, s.name.c_str(), value_type_name(s.type));
+                SocketValue editable = s.default_value;
+                if (edit_value_widget("Default", s.type, editable, s.range)) {
+                    s.default_value = editable;
+                    s.current = editable;
+                }
+                ImGui::Text("Current: %s", format_value(s.current).c_str());
+                ImGui::PopID();
             }
             ImGui::TreePop();
         }
@@ -233,9 +289,9 @@ void App::draw_node(Node& n) {
         if (ImGui::TreeNode("Outputs")) {
             for (size_t i = 0; i < n.outputs.size(); ++i) {
                 const Socket& s = n.outputs[i];
-                ImGui::BulletText("[%zu] %-12s %-6s = %s",
-                                  i, s.name.c_str(), value_type_name(s.type),
-                                  format_value(s.current).c_str());
+                ImGui::Text("[%zu] %s (%s) = %s",
+                            i, s.name.c_str(), value_type_name(s.type),
+                            format_value(s.current).c_str());
             }
             ImGui::TreePop();
         }
@@ -253,9 +309,14 @@ void App::draw_node(Node& n) {
                         break;
                     }
                 }
-                ImGui::BulletText("%-12s %-6s = %s",
-                                  key.c_str(), value_type_name(vt),
-                                  format_value(val).c_str());
+                ImGui::PushID(key.c_str());
+                ImGui::Text("%s (%s)", key.c_str(), value_type_name(vt));
+                SocketValue editable = val;
+                if (edit_value_widget("Value", vt, editable)) {
+                    n.state[key] = editable;
+                }
+                ImGui::Text("Current: %s", format_value(n.state.at(key)).c_str());
+                ImGui::PopID();
             }
             ImGui::TreePop();
         }
