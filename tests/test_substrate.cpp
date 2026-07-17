@@ -184,7 +184,7 @@ int test_fixture_probe_trait_helpers() {
 
 int test_all_node_types() {
     const auto& all = all_node_types();
-    CHECK(all.size() >= 20);
+    CHECK(all.size() >= 21);
     CHECK(all.count("BPMTap") == 1);
     CHECK(all.count("Constant") == 1);
     CHECK(all.count("ConstantVec3") == 1);
@@ -203,6 +203,7 @@ int test_all_node_types() {
     CHECK(all.count("ProbeX") == 1);
     CHECK(all.count("ProbeY") == 1);
     CHECK(all.count("ProbeZ") == 1);
+    CHECK(all.count("Project2D") == 1);
 
     PASS("all_node_types() enumerates registry");
     return 0;
@@ -422,6 +423,28 @@ int test_probe_coordinate_nodes_read_sample_position() {
     CHECK(std::get<Scalar>(z.outputs[0].current) == 0.5f);
 
     PASS("Probe coordinate nodes read the current sample position in XYZ");
+    return 0;
+}
+
+int test_project2d_node_projects_onto_normalized_axis() {
+    const NodeType* project2d = find_node_type("Project2D");
+    CHECK(project2d != nullptr);
+
+    Node n = make_node(*project2d, 65, "Project2D");
+    n.inputs[0].current = SocketValue{Scalar{0.36f}};
+    n.inputs[1].current = SocketValue{Scalar{0.15f}};
+    n.inputs[2].current = SocketValue{Scalar{3.0f}};
+    n.inputs[3].current = SocketValue{Scalar{4.0f}};
+    n.inputs[4].current = SocketValue{Scalar{0.1f}};
+    n.type->evaluate(n, 0.0f, 0.0f, true);
+    CHECK(std::abs(std::get<Scalar>(n.outputs[0].current) - 0.436f) < 0.0001f);
+
+    n.inputs[2].current = SocketValue{Scalar{0.0f}};
+    n.inputs[3].current = SocketValue{Scalar{0.0f}};
+    n.type->evaluate(n, 0.0f, 0.0f, true);
+    CHECK(std::abs(std::get<Scalar>(n.outputs[0].current) - 0.1f) < 0.0001f);
+
+    PASS("Project2D node projects XY onto a normalized 2D axis");
     return 0;
 }
 
@@ -658,6 +681,7 @@ int main() {
     rc |= test_bpm_tap_node_outputs_bpm_and_period();
     rc |= test_multiply_node_multiplies_inputs();
     rc |= test_probe_coordinate_nodes_read_sample_position();
+    rc |= test_project2d_node_projects_onto_normalized_axis();
     rc |= test_sine_node_maps_phase_to_unit_interval();
     rc |= test_ramp_node_wraps_phase_like_signal();
     rc |= test_mix_node_lerps_between_inputs();

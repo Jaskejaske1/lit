@@ -540,9 +540,7 @@ void App::seed_default_spatial_patch() {
     const NodeId probe_x_id = spawn_node_named("ProbeX", "Probe X");
     const NodeId probe_y_id = spawn_node_named("ProbeY", "Probe Y");
     const NodeId mirror_x_id = spawn_node_named("SpatialMirror", "Mirror Symmetry");
-    const NodeId frequency_y_id = spawn_node_named("Constant", "Y Frequency");
-    const NodeId multiply_y_id = spawn_node_named("Multiply", "Y Offset");
-    const NodeId spatial_add_id = spawn_node_named("Add", "Spatial Offset");
+    const NodeId project2d_id = spawn_node_named("Project2D", "Bar Coordinate");
     const NodeId bpm_tap_id = spawn_node_named("BPMTap", "Sweep Tempo");
     const NodeId beats_per_sweep_id = spawn_node_named("Constant", "Beats Per Sweep");
     const NodeId sweep_period_id = spawn_node_named("Multiply", "Sweep Period");
@@ -559,8 +557,8 @@ void App::seed_default_spatial_patch() {
     const NodeId color_mix_id = spawn_node_named("MixVec3", "Color Mix");
     const NodeId fixture_driver_id = spawn_node_named("SpatialFixtureDriver", "Fixture Driver");
 
-    if (!probe_x_id || !probe_y_id || !mirror_x_id || !frequency_y_id ||
-        !multiply_y_id || !spatial_add_id || !bpm_tap_id || !beats_per_sweep_id ||
+    if (!probe_x_id || !probe_y_id || !mirror_x_id || !project2d_id ||
+        !bpm_tap_id || !beats_per_sweep_id ||
         !sweep_period_id || !phase_id || !time_offset_id ||
         !ramp_id || !decay_id || !base_tilt_id || !peak_tilt_id || !tilt_mix_id ||
         !full_intensity_id ||
@@ -568,8 +566,11 @@ void App::seed_default_spatial_patch() {
         return;
     }
 
-    if (Node* frequency_y = graph.find_node(frequency_y_id)) {
-        frequency_y->state["value"] = SocketValue{Scalar{0.75f}};
+    if (Node* project2d = graph.find_node(project2d_id)) {
+        project2d->inputs[2].default_value = SocketValue{Scalar{0.47f}};
+        project2d->inputs[2].current = SocketValue{Scalar{0.47f}};
+        project2d->inputs[3].default_value = SocketValue{Scalar{0.88f}};
+        project2d->inputs[3].current = SocketValue{Scalar{0.88f}};
     }
     if (Node* bpm_tap = graph.find_node(bpm_tap_id)) {
         bpm_tap->state["bpm"] = SocketValue{Scalar{100.0f}};
@@ -598,15 +599,13 @@ void App::seed_default_spatial_patch() {
     }
 
     if (!try_add_connection(probe_x_id, 0, mirror_x_id, 0)) return;
-    if (!try_add_connection(probe_y_id, 0, multiply_y_id, 0)) return;
-    if (!try_add_connection(frequency_y_id, 0, multiply_y_id, 1)) return;
-    if (!try_add_connection(mirror_x_id, 0, spatial_add_id, 0)) return;
-    if (!try_add_connection(multiply_y_id, 0, spatial_add_id, 1)) return;
+    if (!try_add_connection(mirror_x_id, 0, project2d_id, 0)) return;
+    if (!try_add_connection(probe_y_id, 0, project2d_id, 1)) return;
     if (!try_add_connection(bpm_tap_id, 1, sweep_period_id, 0)) return;
     if (!try_add_connection(beats_per_sweep_id, 0, sweep_period_id, 1)) return;
     if (!try_add_connection(sweep_period_id, 0, phase_id, 0)) return;
     if (!try_add_connection(phase_id, 0, time_offset_id, 0)) return;
-    if (!try_add_connection(spatial_add_id, 0, time_offset_id, 1)) return;
+    if (!try_add_connection(project2d_id, 0, time_offset_id, 1)) return;
     if (!try_add_connection(time_offset_id, 0, ramp_id, 0)) return;
     if (!try_add_connection(ramp_id, 0, decay_id, 0)) return;
     if (!try_add_connection(base_tilt_id, 0, tilt_mix_id, 0)) return;
@@ -2038,6 +2037,8 @@ void App::draw_debug_panel() {
     if (ImGui::Button("ProbeY"))        spawn_node("ProbeY");
     ImGui::SameLine();
     if (ImGui::Button("ProbeZ"))        spawn_node("ProbeZ");
+    ImGui::SameLine();
+    if (ImGui::Button("Project 2D"))    spawn_node("Project2D");
     ImGui::SameLine();
     if (ImGui::Button("Spatial Mirror")) spawn_node("SpatialMirror");
 

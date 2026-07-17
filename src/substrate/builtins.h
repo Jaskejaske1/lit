@@ -124,6 +124,26 @@ inline void probe_z_evaluate(Node& self, float, float, bool) {
     self.outputs[0].current = SocketValue{builtin_probe_position[2]};
 }
 
+inline void project2d_evaluate(Node& self, float, float, bool) {
+    const Scalar x = std::get<Scalar>(self.inputs[0].current);
+    const Scalar y = std::get<Scalar>(self.inputs[1].current);
+    const Scalar axis_x = std::get<Scalar>(self.inputs[2].current);
+    const Scalar axis_y = std::get<Scalar>(self.inputs[3].current);
+    const Scalar offset = std::get<Scalar>(self.inputs[4].current);
+
+    const Scalar axis_length = std::sqrt((axis_x * axis_x) + (axis_y * axis_y));
+    if (axis_length <= 0.0001f) {
+        self.outputs[0].current = SocketValue{offset};
+        return;
+    }
+
+    const Scalar normalized_axis_x = axis_x / axis_length;
+    const Scalar normalized_axis_y = axis_y / axis_length;
+    self.outputs[0].current = SocketValue{
+        (x * normalized_axis_x) + (y * normalized_axis_y) + offset
+    };
+}
+
 inline void mix_evaluate(Node& self, float, float, bool) {
     const Scalar a = std::get<Scalar>(self.inputs[0].current);
     const Scalar b = std::get<Scalar>(self.inputs[1].current);
@@ -348,6 +368,33 @@ inline void register_probe_z_node_type() {
     register_node_type(t);
 }
 
+inline void register_project2d_node_type() {
+    NodeType t;
+    t.name         = "Project2D";
+    t.display_name = "Project 2D";
+    t.category     = "Spatial";
+    t.inputs.push_back(SocketSpec{
+        "X", ValueType::Scalar, SocketValue{Scalar{0.0f}}, std::nullopt
+    });
+    t.inputs.push_back(SocketSpec{
+        "Y", ValueType::Scalar, SocketValue{Scalar{0.0f}}, std::nullopt
+    });
+    t.inputs.push_back(SocketSpec{
+        "AxisX", ValueType::Scalar, SocketValue{Scalar{0.0f}}, std::nullopt
+    });
+    t.inputs.push_back(SocketSpec{
+        "AxisY", ValueType::Scalar, SocketValue{Scalar{1.0f}}, std::nullopt
+    });
+    t.inputs.push_back(SocketSpec{
+        "Offset", ValueType::Scalar, SocketValue{Scalar{0.0f}}, std::nullopt
+    });
+    t.outputs.push_back(SocketSpec{
+        "Coordinate", ValueType::Scalar, SocketValue{Scalar{0.0f}}, std::nullopt
+    });
+    t.evaluate = &project2d_evaluate;
+    register_node_type(t);
+}
+
 inline void register_mix_node_type() {
     NodeType t;
     t.name         = "Mix";
@@ -540,6 +587,7 @@ inline void register_builtin_node_types() {
     register_probe_x_node_type();
     register_probe_y_node_type();
     register_probe_z_node_type();
+    register_project2d_node_type();
     register_mix_node_type();
     register_mix_vec3_node_type();
     register_clamp_node_type();
