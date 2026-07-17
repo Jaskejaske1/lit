@@ -229,6 +229,73 @@ void set_world_axis_value(Vec3& position, int axis, float value) {
     position[(std::size_t)axis] = value;
 }
 
+template <typename T>
+void push_history_sample(std::deque<T>& history, const T& value, std::size_t max_size) {
+    history.push_back(value);
+    while (history.size() > max_size) {
+        history.pop_front();
+    }
+}
+
+void draw_scalar_history_plot(const char* label,
+                              const std::deque<float>& history,
+                              ImVec2 size = ImVec2(0.0f, 18.0f)) {
+    if (history.empty()) {
+        ImGui::TextUnformatted("--");
+        return;
+    }
+
+    if (size.x <= 0.0f) {
+        size.x = ImGui::GetContentRegionAvail().x;
+    }
+
+    const std::vector<float> contiguous(history.begin(), history.end());
+    ImGui::PlotLines(label,
+                     contiguous.data(),
+                     (int)contiguous.size(),
+                     0,
+                     nullptr,
+                     0.0f,
+                     1.0f,
+                     size);
+}
+
+void draw_color_history_strip(const char* id,
+                              const std::deque<Vec3>& history,
+                              ImVec2 size = ImVec2(0.0f, 18.0f)) {
+    if (history.empty()) {
+        ImGui::TextUnformatted("--");
+        return;
+    }
+
+    if (size.x <= 0.0f) {
+        size.x = ImGui::GetContentRegionAvail().x;
+    }
+
+    ImVec2 origin = ImGui::GetCursorScreenPos();
+    ImDrawList* draw_list = ImGui::GetWindowDrawList();
+    ImGui::InvisibleButton(id, size);
+
+    const float step = size.x / (float)history.size();
+    for (std::size_t i = 0; i < history.size(); ++i) {
+        const Vec3 color = history[i];
+        const float x0 = origin.x + (float)i * step;
+        const float x1 = (i + 1 == history.size()) ? (origin.x + size.x) : (origin.x + (float)(i + 1) * step);
+        draw_list->AddRectFilled(
+            ImVec2(x0, origin.y),
+            ImVec2(std::max(x1, x0 + 1.0f), origin.y + size.y),
+            IM_COL32((int)(std::clamp(color[0], 0.0f, 1.0f) * 255.0f),
+                     (int)(std::clamp(color[1], 0.0f, 1.0f) * 255.0f),
+                     (int)(std::clamp(color[2], 0.0f, 1.0f) * 255.0f),
+                     255));
+    }
+
+    draw_list->AddRect(origin,
+                       ImVec2(origin.x + size.x, origin.y + size.y),
+                       IM_COL32(90, 90, 90, 255),
+                       3.0f);
+}
+
 // ============================================================================
 // Application
 // ============================================================================
@@ -253,6 +320,13 @@ struct PreviewProbeSample {
     std::optional<Vec3> driver_color_value;
 };
 
+struct PreviewProbeHistory {
+    std::deque<float> preview_scalar_trace;
+    std::deque<Vec3> preview_color_trace;
+    std::deque<float> dimmer_trace;
+    std::deque<float> tilt_trace;
+};
+
 struct PreviewProbeRuntime {
     uint64_t probe_id = 0;
     Graph graph;
@@ -261,6 +335,7 @@ struct PreviewProbeRuntime {
 struct App {
     static constexpr int preview_grid_width = 16;
     static constexpr int preview_grid_height = 10;
+    static constexpr std::size_t preview_probe_history_length = 96;
 
     SDL_Window*   window     = nullptr;
     SDL_GLContext gl_context = nullptr;
@@ -296,6 +371,7 @@ struct App {
     std::vector<PreviewOutputSample> preview_samples;
     std::vector<PreviewProbe> preview_probes;
     std::vector<PreviewProbeSample> preview_probe_samples;
+    std::unordered_map<uint64_t, PreviewProbeHistory> preview_probe_histories;
     std::unordered_map<NodeId, std::deque<double>> bpm_tap_history_seconds;
     std::string  last_graph_error;
     std::optional<NodeId> pending_delete_node_id;
@@ -321,6 +397,7 @@ struct App {
     PreviewProbe* find_preview_probe_by_name(std::string_view name);
     const PreviewProbe* find_preview_probe_by_name(std::string_view name) const;
     const PreviewProbeSample* find_preview_probe_sample(uint64_t id) const;
+    const PreviewProbeHistory* find_preview_probe_history(uint64_t id) const;
     const PreviewProbe* selected_preview_probe() const;
     bool sync_mirrored_preview_probe(const PreviewProbe& source_probe, bool copy_traits);
     std::string current_preview_output_label() const;
@@ -330,7 +407,8 @@ struct App {
     bool rebuild_preview_graphs();
     bool rebuild_preview_probe_graphs();
     bool refresh_preview_samples();
-    void refresh_preview_probe_samples();
+    void refresh_preview_probe_samples(bool append_history = true);
+    void refresh_preview_probe_histories();
     void clear_bpm_tap_history(NodeId id);
     void tap_bpm(Node& node);
     PreviewOutputSample extract_preview_output(const Graph& source_graph) const;
@@ -733,6 +811,7 @@ bool App::reset_default_patch() {
     next_id = 1;
     next_connection_id = 1;
     bpm_tap_history_seconds.clear();
+    preview_probe_histories.clear();
     preview_node_id = 0;
     spatial_fixture_driver_node_id = 0;
     preview_output_socket_index = 0;
@@ -923,6 +1002,11 @@ const PreviewProbeSample* App::find_preview_probe_sample(uint64_t id) const {
         }
     }
     return nullptr;
+}
+
+const PreviewProbeHistory* App::find_preview_probe_history(uint64_t id) const {
+    const auto it = preview_probe_histories.find(id);
+    return it != preview_probe_histories.end() ? &it->second : nullptr;
 }
 
 const PreviewProbe* App::selected_preview_probe() const {
@@ -1139,7 +1223,7 @@ bool App::refresh_preview_samples() {
     return true;
 }
 
-void App::refresh_preview_probe_samples() {
+void App::refresh_preview_probe_samples(bool append_history) {
     preview_probe_samples.clear();
     preview_probe_samples.reserve(preview_probe_graphs.size());
 
@@ -1180,6 +1264,48 @@ void App::refresh_preview_probe_samples() {
                 std::clamp((*color_value)[2], 0.0f, 1.0f),
             }} : std::nullopt,
         });
+    }
+
+    if (append_history) {
+        refresh_preview_probe_histories();
+    }
+}
+
+void App::refresh_preview_probe_histories() {
+    for (auto it = preview_probe_histories.begin(); it != preview_probe_histories.end();) {
+        if (!find_preview_probe_sample(it->first)) {
+            it = preview_probe_histories.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    for (const auto& sample : preview_probe_samples) {
+        PreviewProbeHistory& history = preview_probe_histories[sample.probe_id];
+        if (sample.preview_scalar_value.has_value()) {
+            push_history_sample(history.preview_scalar_trace,
+                                std::clamp(*sample.preview_scalar_value, 0.0f, 1.0f),
+                                preview_probe_history_length);
+        }
+        if (sample.preview_color_value.has_value()) {
+            push_history_sample(history.preview_color_trace,
+                                Vec3{
+                                    std::clamp((*sample.preview_color_value)[0], 0.0f, 1.0f),
+                                    std::clamp((*sample.preview_color_value)[1], 0.0f, 1.0f),
+                                    std::clamp((*sample.preview_color_value)[2], 0.0f, 1.0f),
+                                },
+                                preview_probe_history_length);
+        }
+        if (sample.dimmer_value.has_value()) {
+            push_history_sample(history.dimmer_trace,
+                                std::clamp(*sample.dimmer_value, 0.0f, 1.0f),
+                                preview_probe_history_length);
+        }
+        if (sample.tilt_value.has_value()) {
+            push_history_sample(history.tilt_trace,
+                                std::clamp(*sample.tilt_value, 0.0f, 1.0f),
+                                preview_probe_history_length);
+        }
     }
 }
 
@@ -1562,7 +1688,7 @@ void App::draw_field_preview_panel() {
                 preview_output_socket_index = 0;
                 preview_node = node;
                 refresh_preview_samples();
-                refresh_preview_probe_samples();
+                refresh_preview_probe_samples(false);
             }
             if (selected) {
                 ImGui::SetItemDefaultFocus();
@@ -1595,7 +1721,7 @@ void App::draw_field_preview_panel() {
             if (ImGui::Selectable(preview_node->outputs[output_index].name.c_str(), selected)) {
                 preview_output_socket_index = (int)output_index;
                 refresh_preview_samples();
-                refresh_preview_probe_samples();
+                refresh_preview_probe_samples(false);
             }
             if (selected) {
                 ImGui::SetItemDefaultFocus();
@@ -2150,7 +2276,7 @@ void App::draw_field_preview_panel() {
             std::snprintf(slice_column_label, sizeof(slice_column_label), "%s Pos", world_axis_name(preview_slice_axis));
             const std::string sample_label = current_preview_output_label();
 
-            if (ImGui::BeginTable("SampledPointsTable", 6,
+            if (ImGui::BeginTable("SampledPointsTable", 7,
                                   ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
                                   ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_ScrollY,
                                   ImVec2(0.0f, 260.0f))) {
@@ -2160,6 +2286,7 @@ void App::draw_field_preview_panel() {
                 ImGui::TableSetupColumn(sample_label.c_str(), ImGuiTableColumnFlags_WidthStretch, 1.4f);
                 ImGui::TableSetupColumn("Driver", ImGuiTableColumnFlags_WidthStretch, 1.2f);
                 ImGui::TableSetupColumn("Color", ImGuiTableColumnFlags_WidthStretch, 1.0f);
+                ImGui::TableSetupColumn("Trace", ImGuiTableColumnFlags_WidthStretch, 1.6f);
                 ImGui::TableHeadersRow();
 
                 for (const PreviewProbeSample* sample : ordered_samples) {
@@ -2226,6 +2353,19 @@ void App::draw_field_preview_panel() {
                         ImGui::TextUnformatted("--");
                     }
 
+                    ImGui::TableSetColumnIndex(6);
+                    if (const PreviewProbeHistory* history = find_preview_probe_history(sample->probe_id)) {
+                        if (sample->preview_color_value.has_value() && !history->preview_color_trace.empty()) {
+                            draw_color_history_strip("##PreviewTraceColor", history->preview_color_trace);
+                        } else if (!history->preview_scalar_trace.empty()) {
+                            draw_scalar_history_plot("##PreviewTraceScalar", history->preview_scalar_trace);
+                        } else {
+                            ImGui::TextUnformatted("--");
+                        }
+                    } else {
+                        ImGui::TextUnformatted("--");
+                    }
+
                     ImGui::PopID();
                 }
 
@@ -2251,6 +2391,31 @@ void App::draw_field_preview_panel() {
                         ImGui::Text("Selected driver: dimmer %s  tilt %s",
                                     dimmer_buffer,
                                     tilt_buffer);
+                    }
+                    if (const PreviewProbeHistory* history = find_preview_probe_history(selected_probe->fixture.id)) {
+                        if (selected_sample->preview_color_value.has_value() && !history->preview_color_trace.empty()) {
+                            ImGui::TextUnformatted("Selected preview history");
+                            draw_color_history_strip("##SelectedPreviewColorHistory",
+                                                     history->preview_color_trace,
+                                                     ImVec2(0.0f, 24.0f));
+                        } else if (!history->preview_scalar_trace.empty()) {
+                            ImGui::TextUnformatted("Selected preview history");
+                            draw_scalar_history_plot("##SelectedPreviewScalarHistory",
+                                                     history->preview_scalar_trace,
+                                                     ImVec2(0.0f, 48.0f));
+                        }
+                        if (!history->tilt_trace.empty()) {
+                            ImGui::TextUnformatted("Selected tilt history");
+                            draw_scalar_history_plot("##SelectedTiltHistory",
+                                                     history->tilt_trace,
+                                                     ImVec2(0.0f, 40.0f));
+                        }
+                        if (!history->dimmer_trace.empty()) {
+                            ImGui::TextUnformatted("Selected dimmer history");
+                            draw_scalar_history_plot("##SelectedDimmerHistory",
+                                                     history->dimmer_trace,
+                                                     ImVec2(0.0f, 40.0f));
+                        }
                     }
                 }
             }

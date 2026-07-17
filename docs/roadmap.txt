@@ -95,6 +95,7 @@ Phase 1 - Real substrate skeleton
   - That slice view can now snap directly to the selected probe's plane, which makes the current staged rig materially easier to inspect without hand-chasing the slice coordinate whenever a fixture sits above or below the current cut.
   - The selected-probe summary now explicitly compares the probe's exact 3D output against the current heatmap slice sample, so staged fixtures expose their slice-vs-fixture mismatch directly instead of forcing the user to infer it from the heatmap and labels.
   - The `Sampled Points` pane now also renders as a compact ordered rig table, so the current probe set can be scanned as one structured left/right bar surface with exact sample values and driver outputs instead of a long vertical dump.
+  - That same sampled rig surface now keeps short per-probe preview traces plus larger selected-row preview/dimmer/tilt histories, so the current Builder workbench can read the sweep as motion over time at the exact fixtures instead of only as a single-frame table snapshot.
   - This is meaningful Builder progress, but it is still below the Phase 1 exit criterion because the preview is 2D, the runtime is not baked, and the test-case effect is not yet the diagonal-bars sweep.
 
 Phase 2 - Packaging (substrate module to Intention)

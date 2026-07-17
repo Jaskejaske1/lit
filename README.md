@@ -94,6 +94,7 @@ Current prototype baseline:
 - The active preview slice can now snap directly to the selected probe, which makes it much faster to inspect the exact plane a staged fixture lives on instead of manually dialing the slice coordinate to match.
 - The selected-probe panel now compares the probe's exact 3D sample against the currently viewed heatmap slice sample, so staged fixtures no longer require guesswork when the active slice cuts above or below them.
 - The `Sampled Points` pane now renders as a compact ordered rig table with per-probe coordinates, exact output samples, and coupled driver values, so the current `Bar L*`/`Bar R*` sweep can be scanned as one structured surface instead of a long stack of repeated widgets.
+- That same rig table now keeps short per-probe preview traces, plus larger preview/driver history plots for the selected row, so the Builder workbench can read the moving sweep over time at the exact sampled fixtures instead of only from one frozen frame.
 
 This is still a prototype baseline, not the real Phase 1 engine. See
 [build quickstart](docs/engineering-patterns.txt) (top of file) for more.
