@@ -58,6 +58,11 @@ Phase 1 - Real substrate skeleton
 - Bake constraint applies: topology fixed at build-time, runtime only varies parameters
 - Test case: the diagonal pixel bars red sweep + tilt sweep effect, built inside the substrate, baked, running
 - This is the biggest single phase. Substrate + visual field preview + bake is most of the project.
+- Current prototype slice on July 17, 2026:
+  - Registry-backed nodes, graph bake/topo order, init pass, and live ticking are working on NixOS.
+  - The current built-in node set now includes `Constant`, `ConstantVec3`, `Phase`, `Add`, `Multiply`, `Sine`, `ProbeX`, and `ProbeY`.
+  - `lit_view` can edit disconnected inputs/state, create connections, and preview one scalar output over a sampled 2D `X,Y` grid with explicit user-controlled bounds.
+  - This is meaningful Builder progress, but it is still below the Phase 1 exit criterion because the preview is 2D, the runtime is not baked, and the test-case effect is not yet the diagonal-bars sweep.
 
 Phase 2 - Packaging (substrate module to Intention)
 - Exit criterion: one Intention saved, loaded, exposed parameters working

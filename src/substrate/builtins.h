@@ -13,6 +13,16 @@
 
 namespace substrate {
 
+inline thread_local Vec2 builtin_probe_position{0.0f, 0.0f};
+
+inline void set_builtin_probe_position(Vec2 position) {
+    builtin_probe_position = position;
+}
+
+inline Vec2 current_builtin_probe_position() {
+    return builtin_probe_position;
+}
+
 inline void constant_evaluate(Node& self, float, float, bool) {
     self.outputs[0].current = self.state.at("value");
 }
@@ -72,6 +82,26 @@ inline void add_evaluate(Node& self, float, float, bool) {
     self.outputs[0].current = SocketValue{a + b};
 }
 
+inline void multiply_evaluate(Node& self, float, float, bool) {
+    const Scalar a = std::get<Scalar>(self.inputs[0].current);
+    const Scalar b = std::get<Scalar>(self.inputs[1].current);
+    self.outputs[0].current = SocketValue{a * b};
+}
+
+inline void sine_evaluate(Node& self, float, float, bool) {
+    constexpr Scalar tau = 6.28318530717958647692f;
+    const Scalar input = std::get<Scalar>(self.inputs[0].current);
+    self.outputs[0].current = SocketValue{0.5f + 0.5f * std::sin(tau * input)};
+}
+
+inline void probe_x_evaluate(Node& self, float, float, bool) {
+    self.outputs[0].current = SocketValue{builtin_probe_position[0]};
+}
+
+inline void probe_y_evaluate(Node& self, float, float, bool) {
+    self.outputs[0].current = SocketValue{builtin_probe_position[1]};
+}
+
 inline void register_phase_node_type() {
     NodeType t;
     t.name         = "Phase";
@@ -108,11 +138,72 @@ inline void register_add_node_type() {
     register_node_type(t);
 }
 
+inline void register_multiply_node_type() {
+    NodeType t;
+    t.name         = "Multiply";
+    t.display_name = "Multiply";
+    t.category     = "Modifier";
+    t.inputs.push_back(SocketSpec{
+        "A", ValueType::Scalar, SocketValue{Scalar{1.0f}}, std::nullopt
+    });
+    t.inputs.push_back(SocketSpec{
+        "B", ValueType::Scalar, SocketValue{Scalar{1.0f}}, std::nullopt
+    });
+    t.outputs.push_back(SocketSpec{
+        "Product", ValueType::Scalar, SocketValue{Scalar{0.0f}}, std::nullopt
+    });
+    t.evaluate = &multiply_evaluate;
+    register_node_type(t);
+}
+
+inline void register_sine_node_type() {
+    NodeType t;
+    t.name         = "Sine";
+    t.display_name = "Sine";
+    t.category     = "Modifier";
+    t.inputs.push_back(SocketSpec{
+        "Phase", ValueType::Scalar, SocketValue{Scalar{0.0f}}, std::nullopt
+    });
+    t.outputs.push_back(SocketSpec{
+        "Wave", ValueType::Scalar, SocketValue{Scalar{0.5f}}, std::nullopt
+    });
+    t.evaluate = &sine_evaluate;
+    register_node_type(t);
+}
+
+inline void register_probe_x_node_type() {
+    NodeType t;
+    t.name         = "ProbeX";
+    t.display_name = "Probe X";
+    t.category     = "Spatial";
+    t.outputs.push_back(SocketSpec{
+        "X", ValueType::Scalar, SocketValue{Scalar{0.0f}}, std::nullopt
+    });
+    t.evaluate = &probe_x_evaluate;
+    register_node_type(t);
+}
+
+inline void register_probe_y_node_type() {
+    NodeType t;
+    t.name         = "ProbeY";
+    t.display_name = "Probe Y";
+    t.category     = "Spatial";
+    t.outputs.push_back(SocketSpec{
+        "Y", ValueType::Scalar, SocketValue{Scalar{0.0f}}, std::nullopt
+    });
+    t.evaluate = &probe_y_evaluate;
+    register_node_type(t);
+}
+
 inline void register_builtin_node_types() {
     register_constant_node_type();
     register_constant_vec3_node_type();
     register_phase_node_type();
     register_add_node_type();
+    register_multiply_node_type();
+    register_sine_node_type();
+    register_probe_x_node_type();
+    register_probe_y_node_type();
 }
 
 }  // namespace substrate

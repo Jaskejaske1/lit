@@ -13,6 +13,7 @@
 // (Debug build) or std::get throws (Release build) — either way, non-zero exit.
 
 #include <cassert>
+#include <cmath>
 #include <cstdlib>
 #include <iostream>
 
@@ -159,9 +160,13 @@ int test_vec3_through_variant() {
 
 int test_all_node_types() {
     const auto& all = all_node_types();
-    CHECK(all.size() >= 2);
+    CHECK(all.size() >= 8);
     CHECK(all.count("Constant") == 1);
     CHECK(all.count("ConstantVec3") == 1);
+    CHECK(all.count("Multiply") == 1);
+    CHECK(all.count("Sine") == 1);
+    CHECK(all.count("ProbeX") == 1);
+    CHECK(all.count("ProbeY") == 1);
 
     PASS("all_node_types() enumerates registry");
     return 0;
@@ -323,6 +328,61 @@ int test_phase_node_advances_and_wraps() {
     return 0;
 }
 
+int test_multiply_node_multiplies_inputs() {
+    const NodeType* multiply = find_node_type("Multiply");
+    CHECK(multiply != nullptr);
+
+    Node n = make_node(*multiply, 61, "Multiply");
+    n.inputs[0].default_value = SocketValue{Scalar{2.0f}};
+    n.inputs[0].current = SocketValue{Scalar{2.0f}};
+    n.inputs[1].default_value = SocketValue{Scalar{0.5f}};
+    n.inputs[1].current = SocketValue{Scalar{0.5f}};
+
+    n.type->evaluate(n, 0.0f, 0.0f, false);
+    CHECK(std::get<Scalar>(n.outputs[0].current) == 1.0f);
+
+    PASS("Multiply node multiplies scalar inputs");
+    return 0;
+}
+
+int test_probe_coordinate_nodes_read_sample_position() {
+    const NodeType* probe_x = find_node_type("ProbeX");
+    const NodeType* probe_y = find_node_type("ProbeY");
+    CHECK(probe_x != nullptr);
+    CHECK(probe_y != nullptr);
+
+    set_builtin_probe_position(Vec2{0.25f, 0.75f});
+
+    Node x = make_node(*probe_x, 62, "ProbeX");
+    Node y = make_node(*probe_y, 63, "ProbeY");
+    x.type->evaluate(x, 0.0f, 0.0f, true);
+    y.type->evaluate(y, 0.0f, 0.0f, true);
+
+    CHECK(std::get<Scalar>(x.outputs[0].current) == 0.25f);
+    CHECK(std::get<Scalar>(y.outputs[0].current) == 0.75f);
+
+    PASS("Probe coordinate nodes read the current sample position");
+    return 0;
+}
+
+int test_sine_node_maps_phase_to_unit_interval() {
+    const NodeType* sine = find_node_type("Sine");
+    CHECK(sine != nullptr);
+
+    Node n = make_node(*sine, 64, "Sine");
+    n.inputs[0].default_value = SocketValue{Scalar{0.0f}};
+    n.inputs[0].current = SocketValue{Scalar{0.0f}};
+    n.type->evaluate(n, 0.0f, 0.0f, true);
+    CHECK(std::get<Scalar>(n.outputs[0].current) == 0.5f);
+
+    n.inputs[0].current = SocketValue{Scalar{0.25f}};
+    n.type->evaluate(n, 0.0f, 0.0f, true);
+    CHECK(std::abs(std::get<Scalar>(n.outputs[0].current) - 1.0f) < 0.0001f);
+
+    PASS("Sine node maps phase-like scalar inputs into 0..1 wave output");
+    return 0;
+}
+
 // ----------------------------------------------------------------------------
 
 int main() {
@@ -340,6 +400,9 @@ int main() {
     rc |= test_graph_rejects_multiple_sources_to_one_input();
     rc |= test_graph_init_pass_does_not_advance_time_sensitive_state();
     rc |= test_phase_node_advances_and_wraps();
+    rc |= test_multiply_node_multiplies_inputs();
+    rc |= test_probe_coordinate_nodes_read_sample_position();
+    rc |= test_sine_node_maps_phase_to_unit_interval();
 
     if (rc == 0) {
         std::cout << "\nAll substrate tests passed.\n";

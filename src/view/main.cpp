@@ -140,12 +140,23 @@ struct App {
     int          source_output_selection = 0;
     int          destination_node_selection = 0;
     int          destination_input_selection = 0;
+    NodeId       preview_node_id = 0;
+    int          preview_output_socket_index = 0;
+    float        preview_x_min = 0.0f;
+    float        preview_x_max = 1.0f;
+    float        preview_y_min = 0.0f;
+    float        preview_y_max = 1.0f;
     std::string  last_graph_error;
     std::optional<NodeId> pending_delete_node_id;
     double       last_tick_time = 0.0;
 
     void tick(float dt);
     void delete_node(NodeId id);
+    bool try_add_connection(NodeId source_node_id, std::size_t source_socket_index,
+                            NodeId destination_node_id, std::size_t destination_socket_index);
+    void seed_default_spatial_patch();
+    Vec2 preview_probe_center() const;
+    std::optional<float> sample_preview_output(Vec2 position) const;
 
     bool init();
     void run();
@@ -153,8 +164,9 @@ struct App {
 
     void draw_debug_panel();
     void draw_connections_panel();
+    void draw_field_preview_panel();
     void draw_node(Node& n);
-    void spawn_node(const char* type_name);
+    NodeId spawn_node(const char* type_name);
 };
 
 bool App::init() {
@@ -213,11 +225,8 @@ bool App::init() {
     ImGui_ImplSDL3_InitForOpenGL(window, gl_context);
     ImGui_ImplOpenGL3_Init("#version 460");
 
-    // 8. Spawn a few demo nodes so the user sees something on first frame
-    spawn_node("Constant");
-    spawn_node("Phase");
-    spawn_node("Add");
-    spawn_node("ConstantVec3");
+    // 8. Seed a small moving scalar field so the preview is meaningful immediately.
+    seed_default_spatial_patch();
 
     // 9. Seed the per-frame clock
     last_tick_time = (double)SDL_GetTicks() / 1000.0;
@@ -226,6 +235,7 @@ bool App::init() {
 }
 
 void App::tick(float dt) {
+    set_builtin_probe_position(preview_probe_center());
     GraphBuildError err;
     if (!graph.tick(dt, &err)) {
         last_graph_error = std::string(graph_build_error_name(err.code));
@@ -262,19 +272,23 @@ static bool rebuild_graph(Graph& graph, std::string* error_text = nullptr) {
     return true;
 }
 
-void App::spawn_node(const char* type_name) {
+NodeId App::spawn_node(const char* type_name) {
     const NodeType* t = find_node_type(type_name);
     if (!t) {
         fprintf(stderr, "spawn_node: type '%s' not found\n", type_name);
-        return;
+        return 0;
     }
-    std::string instance_name = std::string(type_name) + " #" + std::to_string(next_id);
-    graph.nodes.push_back(make_node(*t, next_id++, instance_name));
+    NodeId id = next_id++;
+    std::string instance_name = std::string(type_name) + " #" + std::to_string(id);
+    graph.nodes.push_back(make_node(*t, id, instance_name));
 
     if (!rebuild_graph(graph, &last_graph_error)) {
         fprintf(stderr, "spawn_node: graph rebuild failed after adding '%s'\n", type_name);
         running = false;
+        return 0;
     }
+
+    return id;
 }
 
 void App::delete_node(NodeId id) {
@@ -292,6 +306,101 @@ void App::delete_node(NodeId id) {
         graph.nodes.end());
 
     rebuild_graph(graph, &last_graph_error);
+}
+
+bool App::try_add_connection(NodeId source_node_id, std::size_t source_socket_index,
+                             NodeId destination_node_id, std::size_t destination_socket_index) {
+    const Connection connection{
+        next_connection_id++,
+        { source_node_id, source_socket_index },
+        { destination_node_id, destination_socket_index },
+    };
+
+    graph.connections.push_back(connection);
+    std::string failure_text;
+    if (!rebuild_graph(graph, &failure_text)) {
+        graph.connections.pop_back();
+        rebuild_graph(graph, nullptr);
+        last_graph_error = failure_text;
+        return false;
+    }
+
+    last_graph_error.clear();
+    return true;
+}
+
+void App::seed_default_spatial_patch() {
+    const NodeId probe_x_id = spawn_node("ProbeX");
+    const NodeId frequency_id = spawn_node("Constant");
+    const NodeId multiply_id = spawn_node("Multiply");
+    const NodeId phase_id = spawn_node("Phase");
+    const NodeId add_id = spawn_node("Add");
+    const NodeId sine_id = spawn_node("Sine");
+
+    if (!probe_x_id || !frequency_id || !multiply_id || !phase_id || !add_id || !sine_id) {
+        return;
+    }
+
+    if (Node* frequency = graph.find_node(frequency_id)) {
+        frequency->state["value"] = SocketValue{Scalar{4.0f}};
+    }
+    if (Node* phase = graph.find_node(phase_id)) {
+        phase->inputs[0].default_value = SocketValue{Scalar{3.0f}};
+        phase->inputs[0].current = SocketValue{Scalar{3.0f}};
+    }
+
+    if (!try_add_connection(probe_x_id, 0, multiply_id, 0)) return;
+    if (!try_add_connection(frequency_id, 0, multiply_id, 1)) return;
+    if (!try_add_connection(multiply_id, 0, add_id, 0)) return;
+    if (!try_add_connection(phase_id, 0, add_id, 1)) return;
+    if (!try_add_connection(add_id, 0, sine_id, 0)) return;
+
+    preview_node_id = sine_id;
+    preview_output_socket_index = 0;
+}
+
+Vec2 App::preview_probe_center() const {
+    return Vec2{
+        preview_x_min + (preview_x_max - preview_x_min) * 0.5f,
+        preview_y_min + (preview_y_max - preview_y_min) * 0.5f,
+    };
+}
+
+std::optional<float> App::sample_preview_output(Vec2 position) const {
+    if (preview_node_id == 0) {
+        return std::nullopt;
+    }
+
+    const Node* live_node = graph.find_node(preview_node_id);
+    if (!live_node || preview_output_socket_index >= (int)live_node->outputs.size()) {
+        return std::nullopt;
+    }
+
+    if (live_node->outputs[(std::size_t)preview_output_socket_index].type != ValueType::Scalar) {
+        return std::nullopt;
+    }
+
+    Graph preview_graph = graph;
+    preview_graph.initialized = false;
+    const Vec2 previous_probe_position = current_builtin_probe_position();
+    set_builtin_probe_position(position);
+
+    GraphBuildError err;
+    if (!preview_graph.init_pass(&err)) {
+        set_builtin_probe_position(previous_probe_position);
+        return std::nullopt;
+    }
+
+    const Node* preview_node = preview_graph.find_node(preview_node_id);
+    if (!preview_node || preview_output_socket_index >= (int)preview_node->outputs.size()) {
+        set_builtin_probe_position(previous_probe_position);
+        return std::nullopt;
+    }
+
+    const Scalar sample =
+        std::get<Scalar>(preview_node->outputs[(std::size_t)preview_output_socket_index].current);
+    set_builtin_probe_position(previous_probe_position);
+    return sample;
 }
 
 void App::draw_node(Node& n) {
@@ -495,22 +604,153 @@ void App::draw_connections_panel() {
     }
 
     if (ImGui::Button("Add Connection")) {
-        const Connection connection{
-            next_connection_id++,
-            { source_node.id, (std::size_t)source_output_selection },
-            { destination_node.id, (std::size_t)destination_input_selection },
-        };
+        try_add_connection(source_node.id, (std::size_t)source_output_selection,
+                           destination_node.id, (std::size_t)destination_input_selection);
+    }
+}
 
-        graph.connections.push_back(connection);
-        std::string failure_text;
-        if (!rebuild_graph(graph, &failure_text)) {
-            graph.connections.pop_back();
-            rebuild_graph(graph, nullptr);
-            last_graph_error = failure_text;
-        } else {
-            last_graph_error.clear();
+void App::draw_field_preview_panel() {
+    if (!ImGui::CollapsingHeader("Field Preview", ImGuiTreeNodeFlags_DefaultOpen)) {
+        return;
+    }
+
+    std::vector<const Node*> scalar_output_nodes;
+    for (const auto& node : graph.nodes) {
+        for (const auto& output : node.outputs) {
+            if (output.type == ValueType::Scalar) {
+                scalar_output_nodes.push_back(&node);
+                break;
+            }
         }
     }
+
+    if (scalar_output_nodes.empty()) {
+        ImGui::TextUnformatted("Need at least one node with a scalar output.");
+        return;
+    }
+
+    if (!graph.find_node(preview_node_id)) {
+        preview_node_id = scalar_output_nodes.front()->id;
+        preview_output_socket_index = 0;
+    }
+
+    const Node* preview_node = graph.find_node(preview_node_id);
+    if (!preview_node) {
+        ImGui::TextUnformatted("Preview target is unavailable.");
+        return;
+    }
+
+    if (ImGui::BeginCombo("Preview Node", preview_node->name.c_str())) {
+        for (const Node* node : scalar_output_nodes) {
+            const bool selected = node->id == preview_node_id;
+            if (ImGui::Selectable(node->name.c_str(), selected)) {
+                preview_node_id = node->id;
+                preview_output_socket_index = 0;
+                preview_node = node;
+            }
+            if (selected) {
+                ImGui::SetItemDefaultFocus();
+            }
+        }
+        ImGui::EndCombo();
+    }
+
+    std::vector<std::size_t> scalar_outputs;
+    for (std::size_t i = 0; i < preview_node->outputs.size(); ++i) {
+        if (preview_node->outputs[i].type == ValueType::Scalar) {
+            scalar_outputs.push_back(i);
+        }
+    }
+
+    if (scalar_outputs.empty()) {
+        ImGui::TextUnformatted("Selected node has no scalar outputs.");
+        return;
+    }
+
+    if (std::find(scalar_outputs.begin(), scalar_outputs.end(),
+                  (std::size_t)preview_output_socket_index) == scalar_outputs.end()) {
+        preview_output_socket_index = (int)scalar_outputs.front();
+    }
+
+    if (ImGui::BeginCombo("Preview Output", preview_node->outputs[(std::size_t)preview_output_socket_index].name.c_str())) {
+        for (const std::size_t output_index : scalar_outputs) {
+            const bool selected = ((int)output_index == preview_output_socket_index);
+            if (ImGui::Selectable(preview_node->outputs[output_index].name.c_str(), selected)) {
+                preview_output_socket_index = (int)output_index;
+            }
+            if (selected) {
+                ImGui::SetItemDefaultFocus();
+            }
+        }
+        ImGui::EndCombo();
+    }
+
+    auto normalize_bounds = [](float& min_value, float& max_value) {
+        if (min_value > max_value) {
+            std::swap(min_value, max_value);
+        }
+        if ((max_value - min_value) < 0.001f) {
+            max_value = min_value + 0.001f;
+        }
+    };
+
+    float x_bounds[2] = { preview_x_min, preview_x_max };
+    if (ImGui::DragFloat2("X Bounds", x_bounds, 0.01f)) {
+        preview_x_min = x_bounds[0];
+        preview_x_max = x_bounds[1];
+        normalize_bounds(preview_x_min, preview_x_max);
+    }
+
+    float y_bounds[2] = { preview_y_min, preview_y_max };
+    if (ImGui::DragFloat2("Y Bounds", y_bounds, 0.01f)) {
+        preview_y_min = y_bounds[0];
+        preview_y_max = y_bounds[1];
+        normalize_bounds(preview_y_min, preview_y_max);
+    }
+
+    if (ImGui::Button("Reset Domain")) {
+        preview_x_min = 0.0f;
+        preview_x_max = 1.0f;
+        preview_y_min = 0.0f;
+        preview_y_max = 1.0f;
+    }
+
+    constexpr int grid_width = 16;
+    constexpr int grid_height = 10;
+    constexpr float cell_size = 22.0f;
+    constexpr float cell_padding = 3.0f;
+    const ImVec2 origin = ImGui::GetCursorScreenPos();
+    ImDrawList* draw_list = ImGui::GetWindowDrawList();
+
+    for (int y = 0; y < grid_height; ++y) {
+        for (int x = 0; x < grid_width; ++x) {
+            const float fx = grid_width > 1 ? (float)x / (float)(grid_width - 1) : 0.0f;
+            const float fy = grid_height > 1 ? (float)y / (float)(grid_height - 1) : 0.0f;
+            const float sample_x = preview_x_min + fx * (preview_x_max - preview_x_min);
+            const float sample_y = preview_y_min + fy * (preview_y_max - preview_y_min);
+            const std::optional<float> sample = sample_preview_output(Vec2{sample_x, sample_y});
+            const float value = std::clamp(sample.value_or(0.0f), 0.0f, 1.0f);
+
+            const ImVec2 p1{
+                origin.x + x * (cell_size + cell_padding),
+                origin.y + y * (cell_size + cell_padding),
+            };
+            const ImVec2 p2{ p1.x + cell_size, p1.y + cell_size };
+            const ImU32 color = ImGui::GetColorU32(ImVec4(value, value * 0.8f, 0.15f + value * 0.85f, 1.0f));
+
+            draw_list->AddRectFilled(p1, p2, color, 4.0f);
+            draw_list->AddRect(p1, p2, ImGui::GetColorU32(ImVec4(0.12f, 0.12f, 0.14f, 1.0f)), 4.0f);
+        }
+    }
+
+    ImGui::Dummy(ImVec2(
+        grid_width * (cell_size + cell_padding),
+        grid_height * (cell_size + cell_padding)));
+    const Vec2 center = preview_probe_center();
+    ImGui::Text("Domain: X %.2f..%.2f, Y %.2f..%.2f",
+                preview_x_min, preview_x_max, preview_y_min, preview_y_max);
+    ImGui::Text("Inspector probe center: [%.2f, %.2f]", center[0], center[1]);
+    ImGui::Text("Prototype preview: copies the current graph and samples it per probe.");
 }
 
 void App::draw_debug_panel() {
@@ -537,9 +777,20 @@ void App::draw_debug_panel() {
     if (ImGui::Button("Phase"))         spawn_node("Phase");
     ImGui::SameLine();
     if (ImGui::Button("Add"))           spawn_node("Add");
+    ImGui::SameLine();
+    if (ImGui::Button("Multiply"))      spawn_node("Multiply");
+    ImGui::SameLine();
+    if (ImGui::Button("Sine"))          spawn_node("Sine");
+    ImGui::SameLine();
+    if (ImGui::Button("ProbeX"))        spawn_node("ProbeX");
+    ImGui::SameLine();
+    if (ImGui::Button("ProbeY"))        spawn_node("ProbeY");
 
     ImGui::Separator();
     draw_connections_panel();
+
+    ImGui::Separator();
+    draw_field_preview_panel();
 
     // Demo nodes
     ImGui::Separator();
