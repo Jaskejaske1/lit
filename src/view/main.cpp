@@ -719,16 +719,16 @@ bool App::reset_default_patch() {
 
 void App::seed_default_preview_probes() {
     preview_probes = {
-        { FixtureProbe{ next_preview_probe_id++, "Bar L1", Vec3{0.32f, 0.15f, 0.0f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt, FixtureTrait::ColorRGB } }, true },
-        { FixtureProbe{ next_preview_probe_id++, "Bar L2", Vec3{0.28f, 0.30f, 0.0f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt, FixtureTrait::ColorRGB } }, true },
+        { FixtureProbe{ next_preview_probe_id++, "Bar L1", Vec3{0.32f, 0.15f, -0.05f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt, FixtureTrait::ColorRGB } }, true },
+        { FixtureProbe{ next_preview_probe_id++, "Bar L2", Vec3{0.28f, 0.30f, -0.025f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt, FixtureTrait::ColorRGB } }, true },
         { FixtureProbe{ next_preview_probe_id++, "Bar L3", Vec3{0.24f, 0.45f, 0.0f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt, FixtureTrait::ColorRGB } }, true },
-        { FixtureProbe{ next_preview_probe_id++, "Bar L4", Vec3{0.20f, 0.60f, 0.0f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt, FixtureTrait::ColorRGB } }, true },
-        { FixtureProbe{ next_preview_probe_id++, "Bar L5", Vec3{0.16f, 0.75f, 0.0f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt, FixtureTrait::ColorRGB } }, true },
-        { FixtureProbe{ next_preview_probe_id++, "Bar R1", Vec3{0.68f, 0.15f, 0.0f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt, FixtureTrait::ColorRGB } }, true },
-        { FixtureProbe{ next_preview_probe_id++, "Bar R2", Vec3{0.72f, 0.30f, 0.0f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt, FixtureTrait::ColorRGB } }, true },
+        { FixtureProbe{ next_preview_probe_id++, "Bar L4", Vec3{0.20f, 0.60f, 0.025f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt, FixtureTrait::ColorRGB } }, true },
+        { FixtureProbe{ next_preview_probe_id++, "Bar L5", Vec3{0.16f, 0.75f, 0.05f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt, FixtureTrait::ColorRGB } }, true },
+        { FixtureProbe{ next_preview_probe_id++, "Bar R1", Vec3{0.68f, 0.15f, -0.05f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt, FixtureTrait::ColorRGB } }, true },
+        { FixtureProbe{ next_preview_probe_id++, "Bar R2", Vec3{0.72f, 0.30f, -0.025f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt, FixtureTrait::ColorRGB } }, true },
         { FixtureProbe{ next_preview_probe_id++, "Bar R3", Vec3{0.76f, 0.45f, 0.0f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt, FixtureTrait::ColorRGB } }, true },
-        { FixtureProbe{ next_preview_probe_id++, "Bar R4", Vec3{0.80f, 0.60f, 0.0f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt, FixtureTrait::ColorRGB } }, true },
-        { FixtureProbe{ next_preview_probe_id++, "Bar R5", Vec3{0.84f, 0.75f, 0.0f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt, FixtureTrait::ColorRGB } }, true },
+        { FixtureProbe{ next_preview_probe_id++, "Bar R4", Vec3{0.80f, 0.60f, 0.025f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt, FixtureTrait::ColorRGB } }, true },
+        { FixtureProbe{ next_preview_probe_id++, "Bar R5", Vec3{0.84f, 0.75f, 0.05f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt, FixtureTrait::ColorRGB } }, true },
     };
     selected_preview_probe_id = preview_probes.empty()
         ? std::nullopt
