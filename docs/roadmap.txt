@@ -88,6 +88,7 @@ Phase 1 - Real substrate skeleton
   - That 2D field slice now exposes its own `Preview Z` control, so the Builder workbench can inspect `XY` behavior at different heights/depths instead of silently pinning the heatmap to `Z=0`.
   - Those overlay probe dots are now directly draggable in `X/Y` while preserving their stored `Z`, which makes rig-layout iteration happen inside the field preview instead of forcing every position edit through inspector numbers.
   - The probe editor now also supports mirrored-pair locking and explicit pair sync for the current `Bar L*`/`Bar R*` rig, which makes symmetry-preserving layout edits substantially less manual while the forcing-function test case is still a left/right mirrored bar sweep.
+  - That Builder-side field preview can now switch between `XY`, `XZ`, and `YZ` slices, so the same prototype can inspect height/depth structure directly instead of treating every 3D experiment as a flattened `XY` heatmap; the probe overlay and drag path now follow the active slice as well.
   - This is meaningful Builder progress, but it is still below the Phase 1 exit criterion because the preview is 2D, the runtime is not baked, and the test-case effect is not yet the diagonal-bars sweep.
 
 Phase 2 - Packaging (substrate module to Intention)

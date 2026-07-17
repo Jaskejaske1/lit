@@ -87,6 +87,7 @@ Current prototype baseline:
 - Probe dots on that overlay are now directly draggable in `X/Y`, preserving each probe's `Z`, so the current Builder workbench can sketch and retune the hanging rig layout in the preview itself instead of only through inspector floats.
 - The seeded diagonal-bars baseline now uses a named `Project2D` spatial primitive to derive one mirrored bar-local sweep coordinate, which makes the graph read more like an actual bar sweep and less like hand-assembled scalar offset math.
 - The probe editor now includes a `Lock mirrored pairs` workflow plus per-probe `Sync Pair`, so the current `Bar L*`/`Bar R*` rig can stay symmetric while you drag or retune one side instead of manually duplicating every edit.
+- The field preview is no longer locked to `XY@Z`: it can now inspect `XY`, `XZ`, or `YZ` slices, keeps probe dragging in the active plane, and filters the probe overlay to fixtures that actually intersect the current slice.
 
 This is still a prototype baseline, not the real Phase 1 engine. See
 [build quickstart](docs/engineering-patterns.txt) (top of file) for more.

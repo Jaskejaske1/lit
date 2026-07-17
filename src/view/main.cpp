@@ -11,7 +11,9 @@
 // Validated by Phase 0, reused here with the new substrate on top.
 
 #include <algorithm>
+#include <array>
 #include <cctype>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <deque>
@@ -155,6 +157,56 @@ std::optional<std::string> mirrored_probe_name(std::string_view name) {
     return std::nullopt;
 }
 
+enum class PreviewPlane {
+    XY,
+    XZ,
+    YZ,
+};
+
+const char* preview_plane_name(PreviewPlane plane) {
+    switch (plane) {
+        case PreviewPlane::XY: return "XY";
+        case PreviewPlane::XZ: return "XZ";
+        case PreviewPlane::YZ: return "YZ";
+    }
+    return "XY";
+}
+
+const char* world_axis_name(int axis) {
+    switch (axis) {
+        case 0: return "X";
+        case 1: return "Y";
+        case 2: return "Z";
+    }
+    return "?";
+}
+
+std::array<int, 2> preview_plane_axes(PreviewPlane plane) {
+    switch (plane) {
+        case PreviewPlane::XY: return {0, 1};
+        case PreviewPlane::XZ: return {0, 2};
+        case PreviewPlane::YZ: return {1, 2};
+    }
+    return {0, 1};
+}
+
+int preview_plane_slice_axis(PreviewPlane plane) {
+    switch (plane) {
+        case PreviewPlane::XY: return 2;
+        case PreviewPlane::XZ: return 1;
+        case PreviewPlane::YZ: return 0;
+    }
+    return 2;
+}
+
+float world_axis_value(Vec3 position, int axis) {
+    return position[(std::size_t)axis];
+}
+
+void set_world_axis_value(Vec3& position, int axis, float value) {
+    position[(std::size_t)axis] = value;
+}
+
 // ============================================================================
 // Application
 // ============================================================================
@@ -205,11 +257,12 @@ struct App {
     NodeId       preview_node_id = 0;
     NodeId       spatial_fixture_driver_node_id = 0;
     int          preview_output_socket_index = 0;
-    float        preview_x_min = 0.0f;
-    float        preview_x_max = 1.0f;
-    float        preview_y_min = 0.0f;
-    float        preview_y_max = 1.0f;
-    float        preview_z = 0.0f;
+    PreviewPlane preview_plane = PreviewPlane::XY;
+    float        preview_u_min = 0.0f;
+    float        preview_u_max = 1.0f;
+    float        preview_v_min = 0.0f;
+    float        preview_v_max = 1.0f;
+    float        preview_slice = 0.0f;
     bool         show_preview_probes = true;
     bool         lock_mirrored_preview_pairs = true;
     uint64_t     next_preview_probe_id = 1;
@@ -679,11 +732,7 @@ void App::seed_default_preview_probes() {
 }
 
 Vec3 App::preview_probe_center() const {
-    return Vec3{
-        preview_x_min + (preview_x_max - preview_x_min) * 0.5f,
-        preview_y_min + (preview_y_max - preview_y_min) * 0.5f,
-        preview_z,
-    };
+    return preview_world_position_from_normalized(Vec2{0.5f, 0.5f}, preview_slice);
 }
 
 Vec3 App::live_probe_position() const {
@@ -696,23 +745,25 @@ Vec3 App::live_probe_position() const {
 Vec3 App::preview_position_for_cell(int x, int y) const {
     const float fx = preview_grid_width > 1 ? (float)x / (float)(preview_grid_width - 1) : 0.0f;
     const float fy = preview_grid_height > 1 ? (float)y / (float)(preview_grid_height - 1) : 0.0f;
-    return preview_world_position_from_normalized(Vec2{fx, fy}, preview_z);
+    return preview_world_position_from_normalized(Vec2{fx, fy}, preview_slice);
 }
 
-Vec3 App::preview_world_position_from_normalized(Vec2 normalized, float z) const {
-    return Vec3{
-        preview_x_min + normalized[0] * (preview_x_max - preview_x_min),
-        preview_y_min + normalized[1] * (preview_y_max - preview_y_min),
-        z,
-    };
+Vec3 App::preview_world_position_from_normalized(Vec2 normalized, float slice_value) const {
+    const auto axes = preview_plane_axes(preview_plane);
+    Vec3 position{0.0f, 0.0f, 0.0f};
+    set_world_axis_value(position, axes[0], preview_u_min + normalized[0] * (preview_u_max - preview_u_min));
+    set_world_axis_value(position, axes[1], preview_v_min + normalized[1] * (preview_v_max - preview_v_min));
+    set_world_axis_value(position, preview_plane_slice_axis(preview_plane), slice_value);
+    return position;
 }
 
 Vec2 App::preview_normalized_from_world(Vec3 position) const {
-    const float x_span = std::max(preview_x_max - preview_x_min, 0.0001f);
-    const float y_span = std::max(preview_y_max - preview_y_min, 0.0001f);
+    const auto axes = preview_plane_axes(preview_plane);
+    const float u_span = std::max(preview_u_max - preview_u_min, 0.0001f);
+    const float v_span = std::max(preview_v_max - preview_v_min, 0.0001f);
     return Vec2{
-        (position[0] - preview_x_min) / x_span,
-        (position[1] - preview_y_min) / y_span,
+        (world_axis_value(position, axes[0]) - preview_u_min) / u_span,
+        (world_axis_value(position, axes[1]) - preview_v_min) / v_span,
     };
 }
 
@@ -729,29 +780,30 @@ bool App::fit_preview_domain_to_probes(float padding_ratio) {
         return false;
     }
 
-    float min_x = first_enabled_probe->fixture.position[0];
-    float max_x = first_enabled_probe->fixture.position[0];
-    float min_y = first_enabled_probe->fixture.position[1];
-    float max_y = first_enabled_probe->fixture.position[1];
+    const auto axes = preview_plane_axes(preview_plane);
+    float min_u = world_axis_value(first_enabled_probe->fixture.position, axes[0]);
+    float max_u = min_u;
+    float min_v = world_axis_value(first_enabled_probe->fixture.position, axes[1]);
+    float max_v = min_v;
     for (const auto& probe : preview_probes) {
         if (!probe.enabled) {
             continue;
         }
-        min_x = std::min(min_x, probe.fixture.position[0]);
-        max_x = std::max(max_x, probe.fixture.position[0]);
-        min_y = std::min(min_y, probe.fixture.position[1]);
-        max_y = std::max(max_y, probe.fixture.position[1]);
+        min_u = std::min(min_u, world_axis_value(probe.fixture.position, axes[0]));
+        max_u = std::max(max_u, world_axis_value(probe.fixture.position, axes[0]));
+        min_v = std::min(min_v, world_axis_value(probe.fixture.position, axes[1]));
+        max_v = std::max(max_v, world_axis_value(probe.fixture.position, axes[1]));
     }
 
-    const float x_span = std::max(max_x - min_x, 0.1f);
-    const float y_span = std::max(max_y - min_y, 0.1f);
-    const float x_padding = x_span * std::max(padding_ratio, 0.0f);
-    const float y_padding = y_span * std::max(padding_ratio, 0.0f);
+    const float u_span = std::max(max_u - min_u, 0.1f);
+    const float v_span = std::max(max_v - min_v, 0.1f);
+    const float u_padding = u_span * std::max(padding_ratio, 0.0f);
+    const float v_padding = v_span * std::max(padding_ratio, 0.0f);
 
-    preview_x_min = min_x - x_padding;
-    preview_x_max = max_x + x_padding;
-    preview_y_min = min_y - y_padding;
-    preview_y_max = max_y + y_padding;
+    preview_u_min = min_u - u_padding;
+    preview_u_max = max_u + u_padding;
+    preview_v_min = min_v - v_padding;
+    preview_v_max = max_v + v_padding;
     mark_preview_dirty();
     return true;
 }
@@ -1531,32 +1583,56 @@ void App::draw_field_preview_panel() {
         }
     };
 
-    float x_bounds[2] = { preview_x_min, preview_x_max };
-    if (ImGui::DragFloat2("X Bounds", x_bounds, 0.01f)) {
-        preview_x_min = x_bounds[0];
-        preview_x_max = x_bounds[1];
-        normalize_bounds(preview_x_min, preview_x_max);
+    if (ImGui::BeginCombo("Preview Plane", preview_plane_name(preview_plane))) {
+        for (const PreviewPlane candidate : {PreviewPlane::XY, PreviewPlane::XZ, PreviewPlane::YZ}) {
+            const bool selected = candidate == preview_plane;
+            if (ImGui::Selectable(preview_plane_name(candidate), selected)) {
+                preview_plane = candidate;
+                preview_slice = world_axis_value(live_probe_position(), preview_plane_slice_axis(preview_plane));
+                fit_preview_domain_to_probes();
+                mark_preview_dirty();
+            }
+            if (selected) {
+                ImGui::SetItemDefaultFocus();
+            }
+        }
+        ImGui::EndCombo();
+    }
+
+    const auto preview_axes = preview_plane_axes(preview_plane);
+    const int preview_slice_axis = preview_plane_slice_axis(preview_plane);
+
+    char bounds_label[32];
+    char slice_label[32];
+    std::snprintf(bounds_label, sizeof(bounds_label), "%s Bounds", world_axis_name(preview_axes[0]));
+    float u_bounds[2] = { preview_u_min, preview_u_max };
+    if (ImGui::DragFloat2(bounds_label, u_bounds, 0.01f)) {
+        preview_u_min = u_bounds[0];
+        preview_u_max = u_bounds[1];
+        normalize_bounds(preview_u_min, preview_u_max);
         mark_preview_dirty();
     }
 
-    float y_bounds[2] = { preview_y_min, preview_y_max };
-    if (ImGui::DragFloat2("Y Bounds", y_bounds, 0.01f)) {
-        preview_y_min = y_bounds[0];
-        preview_y_max = y_bounds[1];
-        normalize_bounds(preview_y_min, preview_y_max);
+    std::snprintf(bounds_label, sizeof(bounds_label), "%s Bounds", world_axis_name(preview_axes[1]));
+    float v_bounds[2] = { preview_v_min, preview_v_max };
+    if (ImGui::DragFloat2(bounds_label, v_bounds, 0.01f)) {
+        preview_v_min = v_bounds[0];
+        preview_v_max = v_bounds[1];
+        normalize_bounds(preview_v_min, preview_v_max);
         mark_preview_dirty();
     }
 
-    if (ImGui::DragFloat("Preview Z", &preview_z, 0.01f)) {
+    std::snprintf(slice_label, sizeof(slice_label), "Preview %s", world_axis_name(preview_slice_axis));
+    if (ImGui::DragFloat(slice_label, &preview_slice, 0.01f)) {
         mark_preview_dirty();
     }
 
     if (ImGui::Button("Reset Domain")) {
-        preview_x_min = 0.0f;
-        preview_x_max = 1.0f;
-        preview_y_min = 0.0f;
-        preview_y_max = 1.0f;
-        preview_z = 0.0f;
+        preview_u_min = 0.0f;
+        preview_u_max = 1.0f;
+        preview_v_min = 0.0f;
+        preview_v_max = 1.0f;
+        preview_slice = 0.0f;
         mark_preview_dirty();
     }
     ImGui::SameLine();
@@ -1612,8 +1688,13 @@ void App::draw_field_preview_panel() {
     }
 
     if (show_preview_probes) {
+        const float overlay_slice_epsilon = std::max(std::max(preview_u_max - preview_u_min, preview_v_max - preview_v_min) * 0.08f, 0.05f);
         for (const auto& probe : preview_probes) {
             if (!probe.enabled) {
+                continue;
+            }
+            const float slice_distance = std::fabs(world_axis_value(probe.fixture.position, preview_slice_axis) - preview_slice);
+            if (slice_distance > overlay_slice_epsilon) {
                 continue;
             }
             const Vec2 normalized = preview_normalized_from_world(probe.fixture.position);
@@ -1660,8 +1741,8 @@ void App::draw_field_preview_panel() {
 
             std::sort(indices.begin(), indices.end(),
                       [&](std::size_t a, std::size_t b) {
-                          return screen_probes[a].probe->fixture.position[1]
-                              < screen_probes[b].probe->fixture.position[1];
+                          return world_axis_value(screen_probes[a].probe->fixture.position, preview_axes[1])
+                              < world_axis_value(screen_probes[b].probe->fixture.position, preview_axes[1]);
                       });
 
             std::vector<ImVec2> path;
@@ -1731,11 +1812,11 @@ void App::draw_field_preview_panel() {
             const float normalized_y = std::clamp((io.MousePos.y - origin.y) / preview_height, 0.0f, 1.0f);
             const Vec3 next_position = preview_world_position_from_normalized(
                 Vec2{normalized_x, normalized_y},
-                dragged_probe->fixture.position[2]);
+                world_axis_value(dragged_probe->fixture.position, preview_slice_axis));
             const Vec3 previous_position = dragged_probe->fixture.position;
-            const float dx = next_position[0] - previous_position[0];
-            const float dy = next_position[1] - previous_position[1];
-            if ((dx * dx + dy * dy) > 0.00000025f) {
+            const float du = world_axis_value(next_position, preview_axes[0]) - world_axis_value(previous_position, preview_axes[0]);
+            const float dv = world_axis_value(next_position, preview_axes[1]) - world_axis_value(previous_position, preview_axes[1]);
+            if ((du * du + dv * dv) > 0.00000025f) {
                 dragged_probe->fixture.position = next_position;
                 if (lock_mirrored_preview_pairs) {
                     sync_mirrored_preview_probe(*dragged_probe, false);
@@ -1776,8 +1857,11 @@ void App::draw_field_preview_panel() {
         average_color[1] /= (float)color_count;
         average_color[2] /= (float)color_count;
     }
-    ImGui::Text("Domain: X %.2f..%.2f, Y %.2f..%.2f, Z %.2f",
-                preview_x_min, preview_x_max, preview_y_min, preview_y_max, preview_z);
+    ImGui::Text("Plane: %s  Domain: %s %.2f..%.2f, %s %.2f..%.2f, %s %.2f",
+                preview_plane_name(preview_plane),
+                world_axis_name(preview_axes[0]), preview_u_min, preview_u_max,
+                world_axis_name(preview_axes[1]), preview_v_min, preview_v_max,
+                world_axis_name(preview_slice_axis), preview_slice);
     ImGui::Text("Preview range: min %.3f  max %.3f  avg %.3f",
                 preview_min, preview_max,
                 preview_count > 0 ? (preview_sum / (float)preview_count) : 0.0f);
@@ -1820,7 +1904,10 @@ void App::draw_field_preview_panel() {
                 ++enabled_count;
             }
         }
-        ImGui::Text("Probe overlay: %zu enabled sample points shown over the preview field.", enabled_count);
+        ImGui::Text("Probe overlay: %zu/%zu enabled sample points intersect the current %s slice.",
+                    screen_probes.size(),
+                    enabled_count,
+                    preview_plane_name(preview_plane));
     }
     ImGui::Text("Prototype preview: one persistent graph state per sampled probe.");
 
@@ -1831,7 +1918,7 @@ void App::draw_field_preview_panel() {
                 FixtureProbe{
                     next_preview_probe_id++,
                     "Probe " + std::to_string(next_index),
-                    preview_world_position_from_normalized(Vec2{0.5f, 0.5f}),
+                    preview_world_position_from_normalized(Vec2{0.5f, 0.5f}, preview_slice),
                     { FixtureTrait::Dimmer, FixtureTrait::Tilt, FixtureTrait::ColorRGB },
                 },
                 true,
@@ -1919,7 +2006,10 @@ void App::draw_field_preview_panel() {
                 }
             }
 
-            const PreviewOutputSample sample = preview_sample_from_world(probe.fixture.position);
+            const PreviewProbeSample* exact_sample = find_preview_probe_sample(probe.fixture.id);
+            const PreviewOutputSample sample = exact_sample
+                ? PreviewOutputSample{ exact_sample->preview_scalar_value, exact_sample->preview_color_value }
+                : preview_sample_from_world(probe.fixture.position);
             ImGui::Text("Traits: %s", format_fixture_traits(probe.fixture.traits).c_str());
             ImGui::Text("World XYZ: [%.2f, %.2f, %.2f]",
                         probe.fixture.position[0],
