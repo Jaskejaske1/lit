@@ -70,6 +70,7 @@ Current prototype baseline:
 - That same baseline patch now keeps dimmer at full intensity, mixes white-to-red color per probe from the decay trail, and drives tilt as a range mix from that same trail signal, which moves the workbench closer to the docs' red-sweep forcing function instead of a dimmer-only preview.
 - The field preview can now target either scalar or `Vec3` outputs directly, and the grid itself renders color when the selected preview output is `Vec3` instead of leaving color trapped in the probe overlay.
 - The seeded diagonal-sweep workbench now opens on the fixture driver's `ColorRGB` output by default, so the first view you get is the red field instead of a hidden scalar channel.
+- The field preview now also reports lightweight output summary stats, including min/max/average intensity and average color for `Vec3` previews, so iteration is less guesswork-heavy.
 - The sampled-point inspector now shows the exact per-probe preview sample plus the coupled fixture-driver dimmer/tilt values and `ColorRGB` swatch when that bridge is present.
 - The probe overlay now uses fixture-driver color when available, so the sampled bar layout reads more like a lighting sketch and less like a pure scalar debug surface.
 - On startup, `lit_view` now seeds a more effect-like 2D patch built from `ProbeX`, `ProbeY`, `SpatialMirror`, `TimeOffset`, `Sine`, `Decay`, and `Mix`, so the workbench starts closer to the diagonal-sweep ideas in the docs.

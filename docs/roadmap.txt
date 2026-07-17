@@ -72,6 +72,7 @@ Phase 1 - Real substrate skeleton
   - The default bar probes now advertise `Dimmer`, `Tilt`, and `ColorRGB`.
   - The field preview grid can now render those `Vec3` color outputs directly when the selected preview target is color, instead of limiting the main surface to scalar heatmaps.
   - That seeded diagonal-sweep baseline now opens on the fixture driver's `ColorRGB` output by default, so the first preview reads like the red-sweep test case instead of a hidden scalar channel.
+  - The field preview now also reports lightweight summary stats, including min/max/average intensity and average color for `Vec3` previews, so the current Builder workbench exposes more than just raw cells and probe labels.
   - The sampled-point inspector now shows those coupled driver values per probe, including a `ColorRGB` swatch, and the probe overlay now uses fixture-driver color when available.
   - The default seeded patch now keeps dimmer at full intensity, mixes a white-to-red color trail per probe, and drives tilt as a range mix from that same trail signal, which moves the Builder prototype closer to the red-sweep forcing function in the docs instead of only previewing scalar intensity.
   - The default seeded patch now uses symmetry, spatial offset, time offset, and decay, so the first-launch preview is closer to the diagonal-sweep forcing function than a generic oscillator demo.

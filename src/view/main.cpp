@@ -1353,14 +1353,69 @@ void App::draw_field_preview_panel() {
         preview_grid_width * (cell_size + cell_padding),
         preview_grid_height * (cell_size + cell_padding)));
     const Vec2 center = preview_probe_center();
+    const std::optional<ValueType> preview_type = current_preview_output_type();
+    float preview_min = 1.0f;
+    float preview_max = 0.0f;
+    float preview_sum = 0.0f;
+    std::size_t preview_count = 0;
+    Vec3 average_color{0.0f, 0.0f, 0.0f};
+    std::size_t color_count = 0;
+    for (const auto& sample : preview_samples) {
+        const float intensity = preview_sample_intensity(sample);
+        preview_min = std::min(preview_min, intensity);
+        preview_max = std::max(preview_max, intensity);
+        preview_sum += intensity;
+        ++preview_count;
+        if (sample.color_value.has_value()) {
+            average_color[0] += (*sample.color_value)[0];
+            average_color[1] += (*sample.color_value)[1];
+            average_color[2] += (*sample.color_value)[2];
+            ++color_count;
+        }
+    }
+    if (preview_count == 0) {
+        preview_min = 0.0f;
+        preview_max = 0.0f;
+    }
+    if (color_count > 0) {
+        average_color[0] /= (float)color_count;
+        average_color[1] /= (float)color_count;
+        average_color[2] /= (float)color_count;
+    }
     ImGui::Text("Domain: X %.2f..%.2f, Y %.2f..%.2f",
                 preview_x_min, preview_x_max, preview_y_min, preview_y_max);
+    ImGui::Text("Preview range: min %.3f  max %.3f  avg %.3f",
+                preview_min, preview_max,
+                preview_count > 0 ? (preview_sum / (float)preview_count) : 0.0f);
+    if (preview_type == ValueType::Vec3) {
+        ImGui::ColorButton("Average Preview Color",
+                           ImVec4(average_color[0], average_color[1], average_color[2], 1.0f),
+                           ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoDragDrop,
+                           ImVec2(24.0f, 24.0f));
+        ImGui::SameLine();
+        ImGui::Text("Average Color: [%.3f, %.3f, %.3f]",
+                    average_color[0], average_color[1], average_color[2]);
+    }
     if (const PreviewProbe* selected_probe = selected_preview_probe()) {
         ImGui::Text("Selected probe: %s at [%.2f, %.2f, %.2f]",
                     selected_probe->fixture.name.c_str(),
                     selected_probe->fixture.position[0],
                     selected_probe->fixture.position[1],
                     selected_probe->fixture.position[2]);
+        if (const PreviewProbeSample* selected_sample = find_preview_probe_sample(selected_probe->fixture.id)) {
+            if (selected_sample->preview_scalar_value.has_value()) {
+                ImGui::Text("Selected preview sample: %.3f", *selected_sample->preview_scalar_value);
+            } else if (selected_sample->preview_color_value.has_value()) {
+                const Vec3 color = *selected_sample->preview_color_value;
+                ImGui::ColorButton("Selected Preview Color",
+                                   ImVec4(color[0], color[1], color[2], 1.0f),
+                                   ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoDragDrop,
+                                   ImVec2(24.0f, 24.0f));
+                ImGui::SameLine();
+                ImGui::Text("Selected preview color: [%.3f, %.3f, %.3f]",
+                            color[0], color[1], color[2]);
+            }
+        }
     } else {
         ImGui::Text("Inspector probe center: [%.2f, %.2f]", center[0], center[1]);
     }
