@@ -158,6 +158,30 @@ int test_vec3_through_variant() {
     return 0;
 }
 
+int test_fixture_probe_trait_helpers() {
+    FixtureProbe probe{
+        501,
+        "Probe A",
+        Vec3{0.1f, 0.2f, 0.3f},
+        {},
+    };
+
+    CHECK(!fixture_has_trait(probe, FixtureTrait::Dimmer));
+    fixture_set_trait(probe, FixtureTrait::Dimmer, true);
+    fixture_set_trait(probe, FixtureTrait::Pan, true);
+    CHECK(fixture_has_trait(probe, FixtureTrait::Dimmer));
+    CHECK(fixture_has_trait(probe, FixtureTrait::Pan));
+    CHECK(probe.traits.size() == 2);
+    CHECK(fixture_trait_name(FixtureTrait::Tilt) == "Tilt");
+
+    fixture_set_trait(probe, FixtureTrait::Dimmer, false);
+    CHECK(!fixture_has_trait(probe, FixtureTrait::Dimmer));
+    CHECK(fixture_has_trait(probe, FixtureTrait::Pan));
+
+    PASS("Fixture probe helpers manage capability traits");
+    return 0;
+}
+
 int test_all_node_types() {
     const auto& all = all_node_types();
     CHECK(all.size() >= 12);
@@ -477,6 +501,7 @@ int main() {
     rc |= test_make_node_populates_state();
     rc |= test_evaluate_writes_output();
     rc |= test_vec3_through_variant();
+    rc |= test_fixture_probe_trait_helpers();
     rc |= test_all_node_types();
     rc |= test_graph_propagates_connections_in_topological_order();
     rc |= test_graph_uses_default_input_when_disconnected();

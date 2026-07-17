@@ -124,20 +124,40 @@ bool edit_value_widget(const char* label,
     return false;
 }
 
+std::string format_fixture_traits(const std::vector<FixtureTrait>& traits) {
+    if (traits.empty()) {
+        return "None";
+    }
+
+    std::string result;
+    for (std::size_t i = 0; i < traits.size(); ++i) {
+        if (i > 0) {
+            result += ", ";
+        }
+        result += std::string(fixture_trait_name(traits[i]));
+    }
+    return result;
+}
+
+std::string primary_trait_label(const FixtureProbe& probe) {
+    if (probe.traits.empty()) {
+        return "Scalar";
+    }
+    return std::string(fixture_trait_name(probe.traits.front()));
+}
+
 // ============================================================================
 // Application
 // ============================================================================
 
 struct PreviewProbe {
-    uint64_t id = 0;
-    std::string name;
-    Vec2 normalized_position{0.5f, 0.5f};
+    FixtureProbe fixture;
     bool enabled = true;
 };
 
 struct PreviewProbeSample {
     uint64_t probe_id = 0;
-    Vec2 world_position{0.0f, 0.0f};
+    Vec3 world_position{0.0f, 0.0f, 0.0f};
     float scalar_value = 0.0f;
 };
 
@@ -190,8 +210,9 @@ struct App {
     Vec2 preview_probe_center() const;
     Vec2 live_probe_position() const;
     Vec2 preview_position_for_cell(int x, int y) const;
-    Vec2 preview_position_from_normalized(Vec2 normalized) const;
-    float preview_sample_from_normalized(Vec2 normalized) const;
+    Vec3 preview_world_position_from_normalized(Vec2 normalized, float z = 0.0f) const;
+    Vec2 preview_normalized_from_world(Vec3 position) const;
+    float preview_sample_from_world(Vec3 position) const;
     PreviewProbe* find_preview_probe(uint64_t id);
     const PreviewProbe* find_preview_probe(uint64_t id) const;
     const PreviewProbeSample* find_preview_probe_sample(uint64_t id) const;
@@ -325,7 +346,7 @@ void App::tick(float dt) {
         if (!probe || !probe->enabled) {
             continue;
         }
-        set_builtin_probe_position(preview_position_from_normalized(probe->normalized_position));
+        set_builtin_probe_position(Vec2{ probe->fixture.position[0], probe->fixture.position[1] });
         if (!probe_runtime.graph.tick(dt, &err)) {
             last_graph_error = std::string(graph_build_error_name(err.code));
             fprintf(stderr, "Preview probe graph tick failed: %s\n", last_graph_error.c_str());
@@ -494,18 +515,20 @@ void App::seed_default_spatial_patch() {
 
 void App::seed_default_preview_probes() {
     preview_probes = {
-        { next_preview_probe_id++, "Bar L1", Vec2{0.32f, 0.15f}, true },
-        { next_preview_probe_id++, "Bar L2", Vec2{0.28f, 0.30f}, true },
-        { next_preview_probe_id++, "Bar L3", Vec2{0.24f, 0.45f}, true },
-        { next_preview_probe_id++, "Bar L4", Vec2{0.20f, 0.60f}, true },
-        { next_preview_probe_id++, "Bar L5", Vec2{0.16f, 0.75f}, true },
-        { next_preview_probe_id++, "Bar R1", Vec2{0.68f, 0.15f}, true },
-        { next_preview_probe_id++, "Bar R2", Vec2{0.72f, 0.30f}, true },
-        { next_preview_probe_id++, "Bar R3", Vec2{0.76f, 0.45f}, true },
-        { next_preview_probe_id++, "Bar R4", Vec2{0.80f, 0.60f}, true },
-        { next_preview_probe_id++, "Bar R5", Vec2{0.84f, 0.75f}, true },
+        { FixtureProbe{ next_preview_probe_id++, "Bar L1", Vec3{0.32f, 0.15f, 0.0f}, { FixtureTrait::Dimmer } }, true },
+        { FixtureProbe{ next_preview_probe_id++, "Bar L2", Vec3{0.28f, 0.30f, 0.0f}, { FixtureTrait::Dimmer } }, true },
+        { FixtureProbe{ next_preview_probe_id++, "Bar L3", Vec3{0.24f, 0.45f, 0.0f}, { FixtureTrait::Dimmer } }, true },
+        { FixtureProbe{ next_preview_probe_id++, "Bar L4", Vec3{0.20f, 0.60f, 0.0f}, { FixtureTrait::Dimmer } }, true },
+        { FixtureProbe{ next_preview_probe_id++, "Bar L5", Vec3{0.16f, 0.75f, 0.0f}, { FixtureTrait::Dimmer } }, true },
+        { FixtureProbe{ next_preview_probe_id++, "Bar R1", Vec3{0.68f, 0.15f, 0.0f}, { FixtureTrait::Dimmer } }, true },
+        { FixtureProbe{ next_preview_probe_id++, "Bar R2", Vec3{0.72f, 0.30f, 0.0f}, { FixtureTrait::Dimmer } }, true },
+        { FixtureProbe{ next_preview_probe_id++, "Bar R3", Vec3{0.76f, 0.45f, 0.0f}, { FixtureTrait::Dimmer } }, true },
+        { FixtureProbe{ next_preview_probe_id++, "Bar R4", Vec3{0.80f, 0.60f, 0.0f}, { FixtureTrait::Dimmer } }, true },
+        { FixtureProbe{ next_preview_probe_id++, "Bar R5", Vec3{0.84f, 0.75f, 0.0f}, { FixtureTrait::Dimmer } }, true },
     };
-    selected_preview_probe_id = preview_probes.empty() ? std::nullopt : std::optional<uint64_t>{preview_probes.front().id};
+    selected_preview_probe_id = preview_probes.empty()
+        ? std::nullopt
+        : std::optional<uint64_t>{preview_probes.front().fixture.id};
 }
 
 Vec2 App::preview_probe_center() const {
@@ -517,7 +540,7 @@ Vec2 App::preview_probe_center() const {
 
 Vec2 App::live_probe_position() const {
     if (const PreviewProbe* probe = selected_preview_probe()) {
-        return preview_position_from_normalized(probe->normalized_position);
+        return Vec2{ probe->fixture.position[0], probe->fixture.position[1] };
     }
     return preview_probe_center();
 }
@@ -531,18 +554,29 @@ Vec2 App::preview_position_for_cell(int x, int y) const {
     };
 }
 
-Vec2 App::preview_position_from_normalized(Vec2 normalized) const {
-    return Vec2{
+Vec3 App::preview_world_position_from_normalized(Vec2 normalized, float z) const {
+    return Vec3{
         preview_x_min + normalized[0] * (preview_x_max - preview_x_min),
         preview_y_min + normalized[1] * (preview_y_max - preview_y_min),
+        z,
     };
 }
 
-float App::preview_sample_from_normalized(Vec2 normalized) const {
+Vec2 App::preview_normalized_from_world(Vec3 position) const {
+    const float x_span = std::max(preview_x_max - preview_x_min, 0.0001f);
+    const float y_span = std::max(preview_y_max - preview_y_min, 0.0001f);
+    return Vec2{
+        (position[0] - preview_x_min) / x_span,
+        (position[1] - preview_y_min) / y_span,
+    };
+}
+
+float App::preview_sample_from_world(Vec3 position) const {
     if (preview_samples.empty()) {
         return 0.0f;
     }
 
+    const Vec2 normalized = preview_normalized_from_world(position);
     const float fx = std::clamp(normalized[0], 0.0f, 1.0f);
     const float fy = std::clamp(normalized[1], 0.0f, 1.0f);
     const int x = std::clamp((int)std::lround(fx * (preview_grid_width - 1)), 0, preview_grid_width - 1);
@@ -552,7 +586,7 @@ float App::preview_sample_from_normalized(Vec2 normalized) const {
 
 PreviewProbe* App::find_preview_probe(uint64_t id) {
     for (auto& probe : preview_probes) {
-        if (probe.id == id) {
+        if (probe.fixture.id == id) {
             return &probe;
         }
     }
@@ -561,7 +595,7 @@ PreviewProbe* App::find_preview_probe(uint64_t id) {
 
 const PreviewProbe* App::find_preview_probe(uint64_t id) const {
     for (const auto& probe : preview_probes) {
-        if (probe.id == id) {
+        if (probe.fixture.id == id) {
             return &probe;
         }
     }
@@ -594,7 +628,7 @@ void App::ensure_preview_probe_selection() {
     }
     for (const auto& probe : preview_probes) {
         if (probe.enabled) {
-            selected_preview_probe_id = probe.id;
+            selected_preview_probe_id = probe.fixture.id;
             return;
         }
     }
@@ -665,10 +699,10 @@ bool App::rebuild_preview_probe_graphs() {
         }
 
         PreviewProbeRuntime runtime;
-        runtime.probe_id = probe.id;
+        runtime.probe_id = probe.fixture.id;
         runtime.graph = graph;
         runtime.graph.initialized = false;
-        set_builtin_probe_position(preview_position_from_normalized(probe.normalized_position));
+        set_builtin_probe_position(Vec2{ probe.fixture.position[0], probe.fixture.position[1] });
         if (!runtime.graph.init_pass(&err)) {
             last_graph_error = std::string(graph_build_error_name(err.code));
             fprintf(stderr, "Preview probe graph init failed: %s\n", last_graph_error.c_str());
@@ -707,8 +741,8 @@ void App::refresh_preview_probe_samples() {
 
         const std::optional<float> exact_sample = extract_preview_output(runtime.graph);
         preview_probe_samples.push_back(PreviewProbeSample{
-            probe->id,
-            preview_position_from_normalized(probe->normalized_position),
+            probe->fixture.id,
+            probe->fixture.position,
             std::clamp(exact_sample.value_or(0.0f), 0.0f, 1.0f),
         });
     }
@@ -1076,14 +1110,14 @@ void App::draw_field_preview_panel() {
             if (!probe.enabled) {
                 continue;
             }
-            const Vec2 normalized = probe.normalized_position;
-            const PreviewProbeSample* exact_sample = find_preview_probe_sample(probe.id);
+            const Vec2 normalized = preview_normalized_from_world(probe.fixture.position);
+            const PreviewProbeSample* exact_sample = find_preview_probe_sample(probe.fixture.id);
             const float sample = std::clamp(exact_sample ? exact_sample->scalar_value : 0.0f, 0.0f, 1.0f);
             const ImVec2 center{
                 origin.x + normalized[0] * ((preview_grid_width - 1) * (cell_size + cell_padding)),
                 origin.y + normalized[1] * ((preview_grid_height - 1) * (cell_size + cell_padding)),
             };
-            const bool selected = selected_preview_probe_id.has_value() && *selected_preview_probe_id == probe.id;
+            const bool selected = selected_preview_probe_id.has_value() && *selected_preview_probe_id == probe.fixture.id;
             const ImU32 ring_color = ImGui::GetColorU32(
                 selected ? ImVec4(1.0f, 0.95f, 0.35f, 1.0f) : ImVec4(1.0f, 1.0f, 1.0f, 0.95f));
             const ImU32 fill_color = ImGui::GetColorU32(ImVec4(sample, 0.25f + sample * 0.75f, 0.2f, 1.0f));
@@ -1091,7 +1125,7 @@ void App::draw_field_preview_panel() {
             draw_list->AddCircle(center, 7.0f, ring_color, 0, 2.0f);
 
             char label[32];
-            std::snprintf(label, sizeof(label), "%s %.2f", probe.name.c_str(), sample);
+            std::snprintf(label, sizeof(label), "%s %.2f", probe.fixture.name.c_str(), sample);
             draw_list->AddText(ImVec2(center.x + 8.0f, center.y - 8.0f),
                                ring_color,
                                label);
@@ -1105,11 +1139,11 @@ void App::draw_field_preview_panel() {
     ImGui::Text("Domain: X %.2f..%.2f, Y %.2f..%.2f",
                 preview_x_min, preview_x_max, preview_y_min, preview_y_max);
     if (const PreviewProbe* selected_probe = selected_preview_probe()) {
-        const Vec2 live_position = preview_position_from_normalized(selected_probe->normalized_position);
-        ImGui::Text("Selected probe: %s at [%.2f, %.2f]",
-                    selected_probe->name.c_str(),
-                    live_position[0],
-                    live_position[1]);
+        ImGui::Text("Selected probe: %s at [%.2f, %.2f, %.2f]",
+                    selected_probe->fixture.name.c_str(),
+                    selected_probe->fixture.position[0],
+                    selected_probe->fixture.position[1],
+                    selected_probe->fixture.position[2]);
     } else {
         ImGui::Text("Inspector probe center: [%.2f, %.2f]", center[0], center[1]);
     }
@@ -1128,22 +1162,25 @@ void App::draw_field_preview_panel() {
         if (ImGui::Button("Add Probe")) {
             const std::size_t next_index = preview_probes.size() + 1;
             preview_probes.push_back(PreviewProbe{
-                next_preview_probe_id++,
-                "Probe " + std::to_string(next_index),
-                Vec2{0.5f, 0.5f},
+                FixtureProbe{
+                    next_preview_probe_id++,
+                    "Probe " + std::to_string(next_index),
+                    preview_world_position_from_normalized(Vec2{0.5f, 0.5f}),
+                    { FixtureTrait::Dimmer },
+                },
                 true,
             });
-            selected_preview_probe_id = preview_probes.back().id;
+            selected_preview_probe_id = preview_probes.back().fixture.id;
             mark_preview_dirty();
         }
 
         std::optional<uint64_t> probe_to_delete;
         for (auto& probe : preview_probes) {
-            ImGui::PushID((int)probe.id);
+            ImGui::PushID((int)probe.fixture.id);
 
-            const bool selected = selected_preview_probe_id.has_value() && *selected_preview_probe_id == probe.id;
-            if (ImGui::Selectable(probe.name.c_str(), selected)) {
-                selected_preview_probe_id = probe.id;
+            const bool selected = selected_preview_probe_id.has_value() && *selected_preview_probe_id == probe.fixture.id;
+            if (ImGui::Selectable(probe.fixture.name.c_str(), selected)) {
+                selected_preview_probe_id = probe.fixture.id;
             }
             ImGui::SameLine();
             if (ImGui::Checkbox("Enabled", &probe.enabled)) {
@@ -1151,25 +1188,52 @@ void App::draw_field_preview_panel() {
             }
             ImGui::SameLine();
             if (ImGui::SmallButton("Delete")) {
-                probe_to_delete = probe.id;
+                probe_to_delete = probe.fixture.id;
             }
 
             char name_buffer[64];
-            std::snprintf(name_buffer, sizeof(name_buffer), "%s", probe.name.c_str());
+            std::snprintf(name_buffer, sizeof(name_buffer), "%s", probe.fixture.name.c_str());
             if (ImGui::InputText("Name", name_buffer, sizeof(name_buffer))) {
-                probe.name = name_buffer;
+                probe.fixture.name = name_buffer;
             }
 
-            float normalized[2] = { probe.normalized_position[0], probe.normalized_position[1] };
-            if (ImGui::SliderFloat2("Normalized XY", normalized, 0.0f, 1.0f)) {
-                probe.normalized_position = Vec2{normalized[0], normalized[1]};
+            float world_xyz[3] = {
+                probe.fixture.position[0],
+                probe.fixture.position[1],
+                probe.fixture.position[2],
+            };
+            if (ImGui::DragFloat3("World XYZ", world_xyz, 0.01f)) {
+                probe.fixture.position = Vec3{world_xyz[0], world_xyz[1], world_xyz[2]};
                 mark_preview_dirty();
             }
 
-            const Vec2 world = preview_position_from_normalized(probe.normalized_position);
-            const float sample = std::clamp(preview_sample_from_normalized(probe.normalized_position), 0.0f, 1.0f);
-            ImGui::Text("World XY: [%.2f, %.2f]  Sample: %.2f",
-                        world[0], world[1], sample);
+            bool dimmer = fixture_has_trait(probe.fixture, FixtureTrait::Dimmer);
+            if (ImGui::Checkbox("Dimmer Trait", &dimmer)) {
+                fixture_set_trait(probe.fixture, FixtureTrait::Dimmer, dimmer);
+            }
+            ImGui::SameLine();
+            bool pan = fixture_has_trait(probe.fixture, FixtureTrait::Pan);
+            if (ImGui::Checkbox("Pan Trait", &pan)) {
+                fixture_set_trait(probe.fixture, FixtureTrait::Pan, pan);
+            }
+            ImGui::SameLine();
+            bool tilt = fixture_has_trait(probe.fixture, FixtureTrait::Tilt);
+            if (ImGui::Checkbox("Tilt Trait", &tilt)) {
+                fixture_set_trait(probe.fixture, FixtureTrait::Tilt, tilt);
+            }
+            ImGui::SameLine();
+            bool color_rgb = fixture_has_trait(probe.fixture, FixtureTrait::ColorRGB);
+            if (ImGui::Checkbox("ColorRGB Trait", &color_rgb)) {
+                fixture_set_trait(probe.fixture, FixtureTrait::ColorRGB, color_rgb);
+            }
+
+            const float sample = std::clamp(preview_sample_from_world(probe.fixture.position), 0.0f, 1.0f);
+            ImGui::Text("Traits: %s", format_fixture_traits(probe.fixture.traits).c_str());
+            ImGui::Text("World XYZ: [%.2f, %.2f, %.2f]  Sample: %.2f",
+                        probe.fixture.position[0],
+                        probe.fixture.position[1],
+                        probe.fixture.position[2],
+                        sample);
             ImGui::Separator();
             ImGui::PopID();
         }
@@ -1177,7 +1241,7 @@ void App::draw_field_preview_panel() {
         if (probe_to_delete.has_value()) {
             preview_probes.erase(
                 std::remove_if(preview_probes.begin(), preview_probes.end(),
-                               [&](const PreviewProbe& probe) { return probe.id == *probe_to_delete; }),
+                               [&](const PreviewProbe& probe) { return probe.fixture.id == *probe_to_delete; }),
                 preview_probes.end());
             if (selected_preview_probe_id.has_value() && *selected_preview_probe_id == *probe_to_delete) {
                 selected_preview_probe_id.reset();
@@ -1203,15 +1267,18 @@ void App::draw_field_preview_panel() {
 
                 ImGui::PushID((int)sample.probe_id);
                 const bool selected = selected_preview_probe_id.has_value() && *selected_preview_probe_id == sample.probe_id;
-                if (ImGui::Selectable(probe->name.c_str(), selected)) {
+                if (ImGui::Selectable(probe->fixture.name.c_str(), selected)) {
                     selected_preview_probe_id = sample.probe_id;
                 }
-                ImGui::Text("ID: %llu  XY: [%.2f, %.2f]",
+                ImGui::Text("ID: %llu  XYZ: [%.2f, %.2f, %.2f]",
                             (unsigned long long)sample.probe_id,
                             sample.world_position[0],
-                            sample.world_position[1]);
-                ImGui::ProgressBar(sample.scalar_value, ImVec2(-1.0f, 0.0f), "Dimmer");
-                ImGui::Text("Scalar sample: %.3f", sample.scalar_value);
+                            sample.world_position[1],
+                            sample.world_position[2]);
+                ImGui::Text("Traits: %s", format_fixture_traits(probe->fixture.traits).c_str());
+                const std::string sample_label = primary_trait_label(probe->fixture);
+                ImGui::ProgressBar(sample.scalar_value, ImVec2(-1.0f, 0.0f), sample_label.c_str());
+                ImGui::Text("%s sample: %.3f", sample_label.c_str(), sample.scalar_value);
                 ImGui::Separator();
                 ImGui::PopID();
             }

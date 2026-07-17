@@ -7,6 +7,7 @@
 // `#include <substrate/substrate.h>` to pull all types in.
 
 #include "value.h"
+#include "fixture.h"
 #include "socket.h"
 #include "node.h"
 #include "graph.h"

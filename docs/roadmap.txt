@@ -64,8 +64,9 @@ Phase 1 - Real substrate skeleton
   - `lit_view` can edit disconnected inputs/state, create connections, and preview one scalar output over a sampled 2D `X,Y` grid with explicit user-controlled bounds.
   - The field preview now keeps one persistent graph state per sampled probe, which makes temporal nodes meaningful across space instead of collapsing them into one shared history.
   - The preview can now overlay a small default probe layout on top of the heatmap, which is the first concrete step toward the docs' "per-fixture sample points toggleable on top" idea.
-  - Those probes are now first-class named sample points with editable positions, and a selected probe now drives the inspector-side live sample position instead of an invisible center fallback.
+  - Those probes are now first-class named sample points with editable world-space positions, and a selected probe now drives the inspector-side live sample position instead of an invisible center fallback.
   - The workbench now also materializes those named points into concrete sampled outputs with IDs, positions, and scalar values, and those values now come from exact per-point persistent graph evaluation instead of nearest-cell heatmap approximation.
+  - Those Builder-side sample points now sit on top of a minimal substrate-side `FixtureProbe` + `FixtureTrait` model, with helper coverage in `test_substrate`.
   - The default seeded patch now uses symmetry, spatial offset, time offset, and decay, so the first-launch preview is closer to the diagonal-sweep forcing function than a generic oscillator demo.
   - This is meaningful Builder progress, but it is still below the Phase 1 exit criterion because the preview is 2D, the runtime is not baked, and the test-case effect is not yet the diagonal-bars sweep.
 

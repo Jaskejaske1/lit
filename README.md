@@ -54,14 +54,16 @@ Current prototype baseline:
 - `test_substrate` validates the substrate skeleton and registry behavior.
 - `test_substrate` now also validates graph bake/topo order, init pass behavior, cycle rejection, and the built-in `Phase`, `Multiply`, `Sine`, `ProbeX`, and `ProbeY` nodes.
 - `test_substrate` now also covers the first test-case-oriented modifiers: `Mix`, `TimeOffset`, `SpatialMirror`, and `Decay`.
+- `test_substrate` now also covers the minimal fixture/probe helpers that back the Builder-side sample-point model.
 - `lit_view` opens a debug console for the current substrate types, including a live `Phase` node whose output advances over time.
 - `lit_view` also lets you tweak disconnected input sockets and node state live, so the current prototype is a real substrate workbench rather than a read-only inspector.
 - `lit_view` now includes a minimal connection editor, so you can wire compatible outputs into inputs and exercise the real graph bake rules from inside the prototype UI.
 - `lit_view` now includes a first field-preview panel: each sampled cell owns its own persistent graph state, so temporal nodes can evolve differently across space.
 - The field preview still renders a user-controlled 2D `X,Y` heatmap, but it now does so with time history per probe instead of stateless re-sampling.
 - `lit_view` can now overlay a simple default probe layout on top of that heatmap, which makes the preview feel closer to sampled fixture positions instead of a purely abstract field.
-- Those overlay probes are now explicit named sample points in the workbench, with editable normalized positions and a selected live probe that drives the inspector-side sample position.
+- Those overlay probes are now explicit named sample points in the workbench, with editable world-space positions and a selected live probe that drives the inspector-side sample position.
 - `lit_view` now also exposes those sample points as concrete sampled outputs with IDs, positions, and scalar values, and those values now come from exact per-point persistent graph evaluation rather than nearest-cell heatmap lookup.
+- Those workbench sample points now sit on top of a minimal substrate-side `FixtureProbe` + `FixtureTrait` model, which is the first small bridge toward the docs' fixture/probe layer.
 - On startup, `lit_view` now seeds a more effect-like 2D patch built from `ProbeX`, `ProbeY`, `SpatialMirror`, `TimeOffset`, `Sine`, `Decay`, and `Mix`, so the workbench starts closer to the diagonal-sweep ideas in the docs.
 
 This is still a prototype baseline, not the real Phase 1 engine. See
