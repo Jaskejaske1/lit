@@ -184,10 +184,11 @@ int test_fixture_probe_trait_helpers() {
 
 int test_all_node_types() {
     const auto& all = all_node_types();
-    CHECK(all.size() >= 15);
+    CHECK(all.size() >= 16);
     CHECK(all.count("Constant") == 1);
     CHECK(all.count("ConstantVec3") == 1);
     CHECK(all.count("Mix") == 1);
+    CHECK(all.count("MixVec3") == 1);
     CHECK(all.count("TimeOffset") == 1);
     CHECK(all.count("SpatialMirror") == 1);
     CHECK(all.count("Decay") == 1);
@@ -452,11 +453,29 @@ int test_time_offset_wraps_normalized_signal() {
     return 0;
 }
 
+int test_mix_vec3_lerps_between_inputs() {
+    const NodeType* mix_vec3 = find_node_type("MixVec3");
+    CHECK(mix_vec3 != nullptr);
+
+    Node n = make_node(*mix_vec3, 67, "MixVec3");
+    n.inputs[0].current = SocketValue{Vec3{1.0f, 1.0f, 1.0f}};
+    n.inputs[1].current = SocketValue{Vec3{1.0f, 0.0f, 0.0f}};
+    n.inputs[2].current = SocketValue{Scalar{0.25f}};
+    n.type->evaluate(n, 0.0f, 0.0f, true);
+    const Vec3 mixed = std::get<Vec3>(n.outputs[0].current);
+    CHECK(std::abs(mixed[0] - 1.0f) < 0.0001f);
+    CHECK(std::abs(mixed[1] - 0.75f) < 0.0001f);
+    CHECK(std::abs(mixed[2] - 0.75f) < 0.0001f);
+
+    PASS("MixVec3 node lerps Vec3 inputs with scalar blend");
+    return 0;
+}
+
 int test_spatial_mirror_folds_position_around_center() {
     const NodeType* spatial_mirror = find_node_type("SpatialMirror");
     CHECK(spatial_mirror != nullptr);
 
-    Node n = make_node(*spatial_mirror, 67, "SpatialMirror");
+    Node n = make_node(*spatial_mirror, 68, "SpatialMirror");
     n.inputs[0].current = SocketValue{Scalar{0.25f}};
     n.inputs[1].current = SocketValue{Scalar{0.5f}};
     n.inputs[2].current = SocketValue{Scalar{0.5f}};
@@ -475,7 +494,7 @@ int test_decay_node_holds_peaks_and_decays_over_time() {
     const NodeType* decay = find_node_type("Decay");
     CHECK(decay != nullptr);
 
-    Node n = make_node(*decay, 68, "Decay");
+    Node n = make_node(*decay, 69, "Decay");
     n.inputs[0].current = SocketValue{Scalar{1.0f}};
     n.inputs[1].current = SocketValue{Scalar{0.5f}};
     n.type->evaluate(n, 0.0f, 0.0f, true);
@@ -498,7 +517,7 @@ int test_output_dimmer_clamps_scalar_output() {
     const NodeType* output_dimmer = find_node_type("OutputDimmer");
     CHECK(output_dimmer != nullptr);
 
-    Node n = make_node(*output_dimmer, 69, "OutputDimmer");
+    Node n = make_node(*output_dimmer, 70, "OutputDimmer");
     n.inputs[0].current = SocketValue{Scalar{1.3f}};
     n.type->evaluate(n, 0.0f, 0.0f, true);
     CHECK(std::get<Scalar>(n.outputs[0].current) == 1.0f);
@@ -515,7 +534,7 @@ int test_output_tilt_clamps_scalar_output() {
     const NodeType* output_tilt = find_node_type("OutputTilt");
     CHECK(output_tilt != nullptr);
 
-    Node n = make_node(*output_tilt, 70, "OutputTilt");
+    Node n = make_node(*output_tilt, 71, "OutputTilt");
     n.inputs[0].current = SocketValue{Scalar{1.2f}};
     n.type->evaluate(n, 0.0f, 0.0f, true);
     CHECK(std::get<Scalar>(n.outputs[0].current) == 1.0f);
@@ -532,14 +551,19 @@ int test_spatial_fixture_driver_exposes_coupled_outputs() {
     const NodeType* driver = find_node_type("SpatialFixtureDriver");
     CHECK(driver != nullptr);
 
-    Node n = make_node(*driver, 71, "SpatialFixtureDriver");
+    Node n = make_node(*driver, 72, "SpatialFixtureDriver");
     n.inputs[0].current = SocketValue{Scalar{0.75f}};
     n.inputs[1].current = SocketValue{Scalar{1.4f}};
+    n.inputs[2].current = SocketValue{Vec3{1.2f, -0.1f, 0.4f}};
     n.type->evaluate(n, 0.0f, 0.0f, true);
     CHECK(std::get<Scalar>(n.outputs[0].current) == 0.75f);
     CHECK(std::get<Scalar>(n.outputs[1].current) == 1.0f);
+    const Vec3 color = std::get<Vec3>(n.outputs[2].current);
+    CHECK(std::abs(color[0] - 1.0f) < 0.0001f);
+    CHECK(std::abs(color[1] - 0.0f) < 0.0001f);
+    CHECK(std::abs(color[2] - 0.4f) < 0.0001f);
 
-    PASS("SpatialFixtureDriver exposes clamped dimmer and tilt outputs");
+    PASS("SpatialFixtureDriver exposes clamped dimmer, tilt, and color outputs");
     return 0;
 }
 
@@ -566,6 +590,7 @@ int main() {
     rc |= test_sine_node_maps_phase_to_unit_interval();
     rc |= test_mix_node_lerps_between_inputs();
     rc |= test_time_offset_wraps_normalized_signal();
+    rc |= test_mix_vec3_lerps_between_inputs();
     rc |= test_spatial_mirror_folds_position_around_center();
     rc |= test_decay_node_holds_peaks_and_decays_over_time();
     rc |= test_output_dimmer_clamps_scalar_output();

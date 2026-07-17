@@ -56,7 +56,7 @@ Current prototype baseline:
 - `test_substrate` now also covers the first test-case-oriented modifiers: `Mix`, `TimeOffset`, `SpatialMirror`, and `Decay`.
 - `test_substrate` now also covers the minimal fixture/probe helpers that back the Builder-side sample-point model.
 - `test_substrate` now also covers `OutputDimmer` and `OutputTilt`, the first explicit graph-side scalar output primitives for sampled fixtures.
-- `test_substrate` now also covers `SpatialFixtureDriver`, a minimal coupled output node that exposes both dimmer and tilt from one graph-side fixture bridge.
+- `test_substrate` now also covers `MixVec3` and `SpatialFixtureDriver`, so the prototype now has a minimal Vec3 color-mixing path and a coupled fixture bridge for dimmer, tilt, and color.
 - `lit_view` opens a debug console for the current substrate types, including a live `Phase` node whose output advances over time.
 - `lit_view` also lets you tweak disconnected input sockets and node state live, so the current prototype is a real substrate workbench rather than a read-only inspector.
 - `lit_view` now includes a minimal connection editor, so you can wire compatible outputs into inputs and exercise the real graph bake rules from inside the prototype UI.
@@ -65,9 +65,11 @@ Current prototype baseline:
 - `lit_view` can now overlay a simple default probe layout on top of that heatmap, which makes the preview feel closer to sampled fixture positions instead of a purely abstract field.
 - Those overlay probes are now explicit named sample points in the workbench, with editable world-space positions and a selected live probe that drives the inspector-side sample position.
 - `lit_view` now also exposes those sample points as concrete sampled outputs with IDs, positions, and scalar values, and those values now come from exact per-point persistent graph evaluation rather than nearest-cell heatmap lookup.
-- Those workbench sample points now sit on top of a minimal substrate-side `FixtureProbe` + `FixtureTrait` model, and the default bar probes now advertise both `Dimmer` and `Tilt`.
-- The default sweep graph now terminates in a `SpatialFixtureDriver`, so one coupled graph-side fixture bridge publishes both dimmer and tilt instead of splitting the baseline patch across separate output nodes.
-- The sampled-point inspector now shows the exact per-probe preview sample plus the coupled fixture-driver dimmer/tilt values when that bridge is present.
+- Those workbench sample points now sit on top of a minimal substrate-side `FixtureProbe` + `FixtureTrait` model, and the default bar probes now advertise `Dimmer`, `Tilt`, and `ColorRGB`.
+- The default sweep graph now terminates in a `SpatialFixtureDriver`, so one coupled graph-side fixture bridge publishes dimmer, tilt, and color instead of splitting the baseline patch across separate output nodes.
+- That same baseline patch now mixes white-to-red color per probe from the decay trail, which moves the workbench closer to the docs' red-sweep forcing function instead of a dimmer-only preview.
+- The sampled-point inspector now shows the exact per-probe preview sample plus the coupled fixture-driver dimmer/tilt values and `ColorRGB` swatch when that bridge is present.
+- The probe overlay now uses fixture-driver color when available, so the sampled bar layout reads more like a lighting sketch and less like a pure scalar debug surface.
 - On startup, `lit_view` now seeds a more effect-like 2D patch built from `ProbeX`, `ProbeY`, `SpatialMirror`, `TimeOffset`, `Sine`, `Decay`, and `Mix`, so the workbench starts closer to the diagonal-sweep ideas in the docs.
 - `lit_view` can now explicitly reset itself back to that diagonal-sweep baseline, and the seeded graph uses named node instances instead of generic type-number labels.
 

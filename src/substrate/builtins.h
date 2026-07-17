@@ -110,6 +110,17 @@ inline void mix_evaluate(Node& self, float, float, bool) {
     self.outputs[0].current = SocketValue{a + (b - a) * t};
 }
 
+inline void mix_vec3_evaluate(Node& self, float, float, bool) {
+    const Vec3 a = std::get<Vec3>(self.inputs[0].current);
+    const Vec3 b = std::get<Vec3>(self.inputs[1].current);
+    const Scalar t = std::clamp(std::get<Scalar>(self.inputs[2].current), 0.0f, 1.0f);
+    self.outputs[0].current = SocketValue{Vec3{
+        a[0] + (b[0] - a[0]) * t,
+        a[1] + (b[1] - a[1]) * t,
+        a[2] + (b[2] - a[2]) * t,
+    }};
+}
+
 inline void time_offset_evaluate(Node& self, float, float, bool) {
     Scalar value = std::get<Scalar>(self.inputs[0].current);
     value += std::get<Scalar>(self.inputs[1].current);
@@ -157,8 +168,15 @@ inline void output_tilt_evaluate(Node& self, float, float, bool) {
 inline void spatial_fixture_driver_evaluate(Node& self, float, float, bool) {
     const Scalar dimmer = std::clamp(std::get<Scalar>(self.inputs[0].current), 0.0f, 1.0f);
     const Scalar tilt = std::clamp(std::get<Scalar>(self.inputs[1].current), 0.0f, 1.0f);
+    const Vec3 raw_color = std::get<Vec3>(self.inputs[2].current);
+    const Vec3 color{
+        std::clamp(raw_color[0], 0.0f, 1.0f),
+        std::clamp(raw_color[1], 0.0f, 1.0f),
+        std::clamp(raw_color[2], 0.0f, 1.0f),
+    };
     self.outputs[0].current = SocketValue{dimmer};
     self.outputs[1].current = SocketValue{tilt};
+    self.outputs[2].current = SocketValue{color};
 }
 
 inline void register_phase_node_type() {
@@ -275,6 +293,27 @@ inline void register_mix_node_type() {
     register_node_type(t);
 }
 
+inline void register_mix_vec3_node_type() {
+    NodeType t;
+    t.name         = "MixVec3";
+    t.display_name = "Mix Vec3";
+    t.category     = "Modifier";
+    t.inputs.push_back(SocketSpec{
+        "A", ValueType::Vec3, SocketValue{Vec3{0.0f, 0.0f, 0.0f}}, std::nullopt
+    });
+    t.inputs.push_back(SocketSpec{
+        "B", ValueType::Vec3, SocketValue{Vec3{1.0f, 1.0f, 1.0f}}, std::nullopt
+    });
+    t.inputs.push_back(SocketSpec{
+        "T", ValueType::Scalar, SocketValue{Scalar{0.5f}}, std::pair{0.0f, 1.0f}
+    });
+    t.outputs.push_back(SocketSpec{
+        "Value", ValueType::Vec3, SocketValue{Vec3{0.0f, 0.0f, 0.0f}}, std::nullopt
+    });
+    t.evaluate = &mix_vec3_evaluate;
+    register_node_type(t);
+}
+
 inline void register_time_offset_node_type() {
     NodeType t;
     t.name         = "TimeOffset";
@@ -376,11 +415,17 @@ inline void register_spatial_fixture_driver_node_type() {
     t.inputs.push_back(SocketSpec{
         "Tilt", ValueType::Scalar, SocketValue{Scalar{0.0f}}, std::pair{0.0f, 1.0f}
     });
+    t.inputs.push_back(SocketSpec{
+        "ColorRGB", ValueType::Vec3, SocketValue{Vec3{1.0f, 1.0f, 1.0f}}, std::nullopt
+    });
     t.outputs.push_back(SocketSpec{
         "Dimmer", ValueType::Scalar, SocketValue{Scalar{0.0f}}, std::nullopt
     });
     t.outputs.push_back(SocketSpec{
         "Tilt", ValueType::Scalar, SocketValue{Scalar{0.0f}}, std::nullopt
+    });
+    t.outputs.push_back(SocketSpec{
+        "ColorRGB", ValueType::Vec3, SocketValue{Vec3{1.0f, 1.0f, 1.0f}}, std::nullopt
     });
     t.evaluate = &spatial_fixture_driver_evaluate;
     register_node_type(t);
@@ -396,6 +441,7 @@ inline void register_builtin_node_types() {
     register_probe_x_node_type();
     register_probe_y_node_type();
     register_mix_node_type();
+    register_mix_vec3_node_type();
     register_time_offset_node_type();
     register_spatial_mirror_node_type();
     register_decay_node_type();

@@ -154,6 +154,7 @@ struct PreviewProbeSample {
     float scalar_value = 0.0f;
     std::optional<float> dimmer_value;
     std::optional<float> tilt_value;
+    std::optional<Vec3> color_value;
 };
 
 struct PreviewProbeRuntime {
@@ -222,6 +223,7 @@ struct App {
     void refresh_preview_probe_samples();
     std::optional<float> extract_preview_output(const Graph& source_graph) const;
     std::optional<float> extract_node_output_scalar(const Graph& source_graph, NodeId node_id, std::size_t output_index) const;
+    std::optional<Vec3> extract_node_output_vec3(const Graph& source_graph, NodeId node_id, std::size_t output_index) const;
 
     bool init();
     void run();
@@ -482,12 +484,15 @@ void App::seed_default_spatial_patch() {
     const NodeId background_id = spawn_node_named("Constant", "Base Level");
     const NodeId peak_id = spawn_node_named("Constant", "Peak Level");
     const NodeId mix_id = spawn_node_named("Mix", "Dimmer Mix");
+    const NodeId white_id = spawn_node_named("ConstantVec3", "Base White");
+    const NodeId red_id = spawn_node_named("ConstantVec3", "Sweep Red");
+    const NodeId color_mix_id = spawn_node_named("MixVec3", "Color Mix");
     const NodeId fixture_driver_id = spawn_node_named("SpatialFixtureDriver", "Fixture Driver");
 
     if (!probe_x_id || !probe_y_id || !mirror_x_id || !frequency_y_id ||
         !multiply_y_id || !spatial_add_id || !phase_id || !time_offset_id ||
         !sine_id || !decay_id || !background_id || !peak_id || !mix_id ||
-        !fixture_driver_id) {
+        !white_id || !red_id || !color_mix_id || !fixture_driver_id) {
         return;
     }
 
@@ -508,6 +513,12 @@ void App::seed_default_spatial_patch() {
     if (Node* peak = graph.find_node(peak_id)) {
         peak->state["value"] = SocketValue{Scalar{1.0f}};
     }
+    if (Node* white = graph.find_node(white_id)) {
+        white->state["value"] = SocketValue{Vec3{1.0f, 1.0f, 1.0f}};
+    }
+    if (Node* red = graph.find_node(red_id)) {
+        red->state["value"] = SocketValue{Vec3{1.0f, 0.0f, 0.0f}};
+    }
 
     if (!try_add_connection(probe_x_id, 0, mirror_x_id, 0)) return;
     if (!try_add_connection(probe_y_id, 0, multiply_y_id, 0)) return;
@@ -521,8 +532,12 @@ void App::seed_default_spatial_patch() {
     if (!try_add_connection(background_id, 0, mix_id, 0)) return;
     if (!try_add_connection(peak_id, 0, mix_id, 1)) return;
     if (!try_add_connection(decay_id, 0, mix_id, 2)) return;
+    if (!try_add_connection(white_id, 0, color_mix_id, 0)) return;
+    if (!try_add_connection(red_id, 0, color_mix_id, 1)) return;
+    if (!try_add_connection(decay_id, 0, color_mix_id, 2)) return;
     if (!try_add_connection(mix_id, 0, fixture_driver_id, 0)) return;
     if (!try_add_connection(sine_id, 0, fixture_driver_id, 1)) return;
+    if (!try_add_connection(color_mix_id, 0, fixture_driver_id, 2)) return;
 
     spatial_fixture_driver_node_id = fixture_driver_id;
     preview_node_id = fixture_driver_id;
@@ -549,16 +564,16 @@ bool App::reset_default_patch() {
 
 void App::seed_default_preview_probes() {
     preview_probes = {
-        { FixtureProbe{ next_preview_probe_id++, "Bar L1", Vec3{0.32f, 0.15f, 0.0f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt } }, true },
-        { FixtureProbe{ next_preview_probe_id++, "Bar L2", Vec3{0.28f, 0.30f, 0.0f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt } }, true },
-        { FixtureProbe{ next_preview_probe_id++, "Bar L3", Vec3{0.24f, 0.45f, 0.0f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt } }, true },
-        { FixtureProbe{ next_preview_probe_id++, "Bar L4", Vec3{0.20f, 0.60f, 0.0f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt } }, true },
-        { FixtureProbe{ next_preview_probe_id++, "Bar L5", Vec3{0.16f, 0.75f, 0.0f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt } }, true },
-        { FixtureProbe{ next_preview_probe_id++, "Bar R1", Vec3{0.68f, 0.15f, 0.0f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt } }, true },
-        { FixtureProbe{ next_preview_probe_id++, "Bar R2", Vec3{0.72f, 0.30f, 0.0f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt } }, true },
-        { FixtureProbe{ next_preview_probe_id++, "Bar R3", Vec3{0.76f, 0.45f, 0.0f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt } }, true },
-        { FixtureProbe{ next_preview_probe_id++, "Bar R4", Vec3{0.80f, 0.60f, 0.0f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt } }, true },
-        { FixtureProbe{ next_preview_probe_id++, "Bar R5", Vec3{0.84f, 0.75f, 0.0f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt } }, true },
+        { FixtureProbe{ next_preview_probe_id++, "Bar L1", Vec3{0.32f, 0.15f, 0.0f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt, FixtureTrait::ColorRGB } }, true },
+        { FixtureProbe{ next_preview_probe_id++, "Bar L2", Vec3{0.28f, 0.30f, 0.0f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt, FixtureTrait::ColorRGB } }, true },
+        { FixtureProbe{ next_preview_probe_id++, "Bar L3", Vec3{0.24f, 0.45f, 0.0f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt, FixtureTrait::ColorRGB } }, true },
+        { FixtureProbe{ next_preview_probe_id++, "Bar L4", Vec3{0.20f, 0.60f, 0.0f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt, FixtureTrait::ColorRGB } }, true },
+        { FixtureProbe{ next_preview_probe_id++, "Bar L5", Vec3{0.16f, 0.75f, 0.0f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt, FixtureTrait::ColorRGB } }, true },
+        { FixtureProbe{ next_preview_probe_id++, "Bar R1", Vec3{0.68f, 0.15f, 0.0f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt, FixtureTrait::ColorRGB } }, true },
+        { FixtureProbe{ next_preview_probe_id++, "Bar R2", Vec3{0.72f, 0.30f, 0.0f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt, FixtureTrait::ColorRGB } }, true },
+        { FixtureProbe{ next_preview_probe_id++, "Bar R3", Vec3{0.76f, 0.45f, 0.0f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt, FixtureTrait::ColorRGB } }, true },
+        { FixtureProbe{ next_preview_probe_id++, "Bar R4", Vec3{0.80f, 0.60f, 0.0f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt, FixtureTrait::ColorRGB } }, true },
+        { FixtureProbe{ next_preview_probe_id++, "Bar R5", Vec3{0.84f, 0.75f, 0.0f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt, FixtureTrait::ColorRGB } }, true },
     };
     selected_preview_probe_id = preview_probes.empty()
         ? std::nullopt
@@ -711,6 +726,24 @@ std::optional<float> App::extract_node_output_scalar(const Graph& source_graph, 
     return std::get<Scalar>(source_node->outputs[output_index].current);
 }
 
+std::optional<Vec3> App::extract_node_output_vec3(const Graph& source_graph, NodeId node_id,
+                                                  std::size_t output_index) const {
+    if (node_id == 0) {
+        return std::nullopt;
+    }
+
+    const Node* source_node = source_graph.find_node(node_id);
+    if (!source_node || output_index >= source_node->outputs.size()) {
+        return std::nullopt;
+    }
+
+    if (source_node->outputs[output_index].type != ValueType::Vec3) {
+        return std::nullopt;
+    }
+
+    return std::get<Vec3>(source_node->outputs[output_index].current);
+}
+
 bool App::rebuild_preview_graphs() {
     preview_graphs.clear();
     preview_samples.assign((std::size_t)(preview_grid_width * preview_grid_height), 0.0f);
@@ -789,16 +822,26 @@ void App::refresh_preview_probe_samples() {
         }
 
         const std::optional<float> exact_sample = extract_preview_output(runtime.graph);
-        const std::optional<float> dimmer_value =
-            extract_node_output_scalar(runtime.graph, spatial_fixture_driver_node_id, 0);
-        const std::optional<float> tilt_value =
-            extract_node_output_scalar(runtime.graph, spatial_fixture_driver_node_id, 1);
+        const std::optional<float> dimmer_value = fixture_has_trait(probe->fixture, FixtureTrait::Dimmer)
+            ? extract_node_output_scalar(runtime.graph, spatial_fixture_driver_node_id, 0)
+            : std::nullopt;
+        const std::optional<float> tilt_value = fixture_has_trait(probe->fixture, FixtureTrait::Tilt)
+            ? extract_node_output_scalar(runtime.graph, spatial_fixture_driver_node_id, 1)
+            : std::nullopt;
+        const std::optional<Vec3> color_value = fixture_has_trait(probe->fixture, FixtureTrait::ColorRGB)
+            ? extract_node_output_vec3(runtime.graph, spatial_fixture_driver_node_id, 2)
+            : std::nullopt;
         preview_probe_samples.push_back(PreviewProbeSample{
             probe->fixture.id,
             probe->fixture.position,
             std::clamp(exact_sample.value_or(0.0f), 0.0f, 1.0f),
             dimmer_value ? std::optional<float>{std::clamp(*dimmer_value, 0.0f, 1.0f)} : std::nullopt,
             tilt_value ? std::optional<float>{std::clamp(*tilt_value, 0.0f, 1.0f)} : std::nullopt,
+            color_value ? std::optional<Vec3>{Vec3{
+                std::clamp((*color_value)[0], 0.0f, 1.0f),
+                std::clamp((*color_value)[1], 0.0f, 1.0f),
+                std::clamp((*color_value)[2], 0.0f, 1.0f),
+            }} : std::nullopt,
         });
     }
 }
@@ -1053,6 +1096,7 @@ void App::draw_field_preview_panel() {
                 preview_output_socket_index = 0;
                 preview_node = node;
                 refresh_preview_samples();
+                refresh_preview_probe_samples();
             }
             if (selected) {
                 ImGui::SetItemDefaultFocus();
@@ -1084,6 +1128,7 @@ void App::draw_field_preview_panel() {
             if (ImGui::Selectable(preview_node->outputs[output_index].name.c_str(), selected)) {
                 preview_output_socket_index = (int)output_index;
                 refresh_preview_samples();
+                refresh_preview_probe_samples();
             }
             if (selected) {
                 ImGui::SetItemDefaultFocus();
@@ -1175,7 +1220,15 @@ void App::draw_field_preview_panel() {
             const bool selected = selected_preview_probe_id.has_value() && *selected_preview_probe_id == probe.fixture.id;
             const ImU32 ring_color = ImGui::GetColorU32(
                 selected ? ImVec4(1.0f, 0.95f, 0.35f, 1.0f) : ImVec4(1.0f, 1.0f, 1.0f, 0.95f));
-            const ImU32 fill_color = ImGui::GetColorU32(ImVec4(sample, 0.25f + sample * 0.75f, 0.2f, 1.0f));
+            ImVec4 probe_color = ImVec4(sample, 0.25f + sample * 0.75f, 0.2f, 1.0f);
+            if (exact_sample && exact_sample->color_value.has_value()) {
+                probe_color = ImVec4(
+                    (*exact_sample->color_value)[0],
+                    (*exact_sample->color_value)[1],
+                    (*exact_sample->color_value)[2],
+                    1.0f);
+            }
+            const ImU32 fill_color = ImGui::GetColorU32(probe_color);
             draw_list->AddCircleFilled(center, 5.0f, fill_color);
             draw_list->AddCircle(center, 7.0f, ring_color, 0, 2.0f);
 
@@ -1221,7 +1274,7 @@ void App::draw_field_preview_panel() {
                     next_preview_probe_id++,
                     "Probe " + std::to_string(next_index),
                     preview_world_position_from_normalized(Vec2{0.5f, 0.5f}),
-                    { FixtureTrait::Dimmer },
+                    { FixtureTrait::Dimmer, FixtureTrait::Tilt, FixtureTrait::ColorRGB },
                 },
                 true,
             });
@@ -1347,6 +1400,16 @@ void App::draw_field_preview_panel() {
                                 dimmer_buffer,
                                 tilt_buffer);
                 }
+                if (sample.color_value.has_value()) {
+                    const Vec3 color = *sample.color_value;
+                    ImGui::ColorButton("ColorRGB",
+                                       ImVec4(color[0], color[1], color[2], 1.0f),
+                                       ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoDragDrop,
+                                       ImVec2(24.0f, 24.0f));
+                    ImGui::SameLine();
+                    ImGui::Text("Color RGB: [%.3f, %.3f, %.3f]",
+                                color[0], color[1], color[2]);
+                }
                 ImGui::Separator();
                 ImGui::PopID();
             }
@@ -1387,6 +1450,8 @@ void App::draw_debug_panel() {
     if (ImGui::Button("Multiply"))      spawn_node("Multiply");
     ImGui::SameLine();
     if (ImGui::Button("Mix"))           spawn_node("Mix");
+    ImGui::SameLine();
+    if (ImGui::Button("Mix Vec3"))      spawn_node("MixVec3");
     ImGui::SameLine();
     if (ImGui::Button("Output Dimmer")) spawn_node("OutputDimmer");
     ImGui::SameLine();
