@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 
 #include "graph.h"
@@ -102,6 +103,47 @@ inline void probe_y_evaluate(Node& self, float, float, bool) {
     self.outputs[0].current = SocketValue{builtin_probe_position[1]};
 }
 
+inline void mix_evaluate(Node& self, float, float, bool) {
+    const Scalar a = std::get<Scalar>(self.inputs[0].current);
+    const Scalar b = std::get<Scalar>(self.inputs[1].current);
+    const Scalar t = std::clamp(std::get<Scalar>(self.inputs[2].current), 0.0f, 1.0f);
+    self.outputs[0].current = SocketValue{a + (b - a) * t};
+}
+
+inline void time_offset_evaluate(Node& self, float, float, bool) {
+    Scalar value = std::get<Scalar>(self.inputs[0].current);
+    value += std::get<Scalar>(self.inputs[1].current);
+    value = std::fmod(value, 1.0f);
+    if (value < 0.0f) {
+        value += 1.0f;
+    }
+    self.outputs[0].current = SocketValue{value};
+}
+
+inline void spatial_mirror_evaluate(Node& self, float, float, bool) {
+    const Scalar position = std::get<Scalar>(self.inputs[0].current);
+    const Scalar center = std::get<Scalar>(self.inputs[1].current);
+    const Scalar half_width = std::max(std::get<Scalar>(self.inputs[2].current), 0.0001f);
+    const Scalar mirrored = std::clamp(std::abs(position - center) / half_width, 0.0f, 1.0f);
+    self.outputs[0].current = SocketValue{mirrored};
+}
+
+inline void decay_evaluate(Node& self, float dt, float, bool init_pass) {
+    const Scalar input = std::clamp(std::get<Scalar>(self.inputs[0].current), 0.0f, 1.0f);
+    const Scalar tau = std::max(std::get<Scalar>(self.inputs[1].current), 0.0f);
+    Scalar previous_value = std::clamp(std::get<Scalar>(self.state.at("prev_value")), 0.0f, 1.0f);
+
+    if (!init_pass && tau > 0.0f) {
+        previous_value *= std::exp(-dt / tau);
+    } else if (!init_pass) {
+        previous_value = 0.0f;
+    }
+
+    const Scalar output = std::max(input, previous_value);
+    self.state["prev_value"] = SocketValue{output};
+    self.outputs[0].current = SocketValue{output};
+}
+
 inline void register_phase_node_type() {
     NodeType t;
     t.name         = "Phase";
@@ -195,6 +237,87 @@ inline void register_probe_y_node_type() {
     register_node_type(t);
 }
 
+inline void register_mix_node_type() {
+    NodeType t;
+    t.name         = "Mix";
+    t.display_name = "Mix";
+    t.category     = "Modifier";
+    t.inputs.push_back(SocketSpec{
+        "A", ValueType::Scalar, SocketValue{Scalar{0.0f}}, std::nullopt
+    });
+    t.inputs.push_back(SocketSpec{
+        "B", ValueType::Scalar, SocketValue{Scalar{1.0f}}, std::nullopt
+    });
+    t.inputs.push_back(SocketSpec{
+        "T", ValueType::Scalar, SocketValue{Scalar{0.5f}}, std::pair{0.0f, 1.0f}
+    });
+    t.outputs.push_back(SocketSpec{
+        "Value", ValueType::Scalar, SocketValue{Scalar{0.0f}}, std::nullopt
+    });
+    t.evaluate = &mix_evaluate;
+    register_node_type(t);
+}
+
+inline void register_time_offset_node_type() {
+    NodeType t;
+    t.name         = "TimeOffset";
+    t.display_name = "Time Offset";
+    t.category     = "Modifier";
+    t.inputs.push_back(SocketSpec{
+        "Signal", ValueType::Scalar, SocketValue{Scalar{0.0f}}, std::nullopt
+    });
+    t.inputs.push_back(SocketSpec{
+        "Offset", ValueType::Scalar, SocketValue{Scalar{0.0f}}, std::pair{-1.0f, 1.0f}
+    });
+    t.outputs.push_back(SocketSpec{
+        "Shifted", ValueType::Scalar, SocketValue{Scalar{0.0f}}, std::nullopt
+    });
+    t.evaluate = &time_offset_evaluate;
+    register_node_type(t);
+}
+
+inline void register_spatial_mirror_node_type() {
+    NodeType t;
+    t.name         = "SpatialMirror";
+    t.display_name = "Spatial Mirror";
+    t.category     = "Spatial";
+    t.inputs.push_back(SocketSpec{
+        "Position", ValueType::Scalar, SocketValue{Scalar{0.0f}}, std::nullopt
+    });
+    t.inputs.push_back(SocketSpec{
+        "Center", ValueType::Scalar, SocketValue{Scalar{0.5f}}, std::nullopt
+    });
+    t.inputs.push_back(SocketSpec{
+        "HalfWidth", ValueType::Scalar, SocketValue{Scalar{0.5f}}, std::pair{0.0001f, 1000.0f}
+    });
+    t.outputs.push_back(SocketSpec{
+        "Mirrored", ValueType::Scalar, SocketValue{Scalar{0.0f}}, std::nullopt
+    });
+    t.evaluate = &spatial_mirror_evaluate;
+    register_node_type(t);
+}
+
+inline void register_decay_node_type() {
+    NodeType t;
+    t.name         = "Decay";
+    t.display_name = "Decay";
+    t.category     = "Modifier";
+    t.inputs.push_back(SocketSpec{
+        "Input", ValueType::Scalar, SocketValue{Scalar{0.0f}}, std::pair{0.0f, 1.0f}
+    });
+    t.inputs.push_back(SocketSpec{
+        "Tau", ValueType::Scalar, SocketValue{Scalar{0.35f}}, std::pair{0.0f, 10.0f}
+    });
+    t.outputs.push_back(SocketSpec{
+        "Value", ValueType::Scalar, SocketValue{Scalar{0.0f}}, std::nullopt
+    });
+    t.state_schema.push_back(StateKeySpec{
+        "prev_value", ValueType::Scalar, SocketValue{Scalar{0.0f}}
+    });
+    t.evaluate = &decay_evaluate;
+    register_node_type(t);
+}
+
 inline void register_builtin_node_types() {
     register_constant_node_type();
     register_constant_vec3_node_type();
@@ -204,6 +327,10 @@ inline void register_builtin_node_types() {
     register_sine_node_type();
     register_probe_x_node_type();
     register_probe_y_node_type();
+    register_mix_node_type();
+    register_time_offset_node_type();
+    register_spatial_mirror_node_type();
+    register_decay_node_type();
 }
 
 }  // namespace substrate

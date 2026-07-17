@@ -129,6 +129,9 @@ bool edit_value_widget(const char* label,
 // ============================================================================
 
 struct App {
+    static constexpr int preview_grid_width = 16;
+    static constexpr int preview_grid_height = 10;
+
     SDL_Window*   window     = nullptr;
     SDL_GLContext gl_context = nullptr;
     bool          running    = true;
@@ -146,17 +149,24 @@ struct App {
     float        preview_x_max = 1.0f;
     float        preview_y_min = 0.0f;
     float        preview_y_max = 1.0f;
+    bool         preview_graphs_dirty = true;
+    std::vector<Graph> preview_graphs;
+    std::vector<float> preview_samples;
     std::string  last_graph_error;
     std::optional<NodeId> pending_delete_node_id;
     double       last_tick_time = 0.0;
 
     void tick(float dt);
+    void mark_preview_dirty();
     void delete_node(NodeId id);
     bool try_add_connection(NodeId source_node_id, std::size_t source_socket_index,
                             NodeId destination_node_id, std::size_t destination_socket_index);
     void seed_default_spatial_patch();
     Vec2 preview_probe_center() const;
-    std::optional<float> sample_preview_output(Vec2 position) const;
+    Vec2 preview_position_for_cell(int x, int y) const;
+    bool rebuild_preview_graphs();
+    bool refresh_preview_samples();
+    std::optional<float> extract_preview_output(const Graph& source_graph) const;
 
     bool init();
     void run();
@@ -241,6 +251,33 @@ void App::tick(float dt) {
         last_graph_error = std::string(graph_build_error_name(err.code));
         fprintf(stderr, "Graph tick failed: %s\n", last_graph_error.c_str());
         running = false;
+        return;
+    }
+
+    if (preview_graphs_dirty || preview_graphs.size() != (std::size_t)(preview_grid_width * preview_grid_height)) {
+        if (!rebuild_preview_graphs()) {
+            return;
+        }
+    }
+
+    const Vec2 previous_probe_position = current_builtin_probe_position();
+    for (int y = 0; y < preview_grid_height; ++y) {
+        for (int x = 0; x < preview_grid_width; ++x) {
+            const std::size_t index = (std::size_t)(y * preview_grid_width + x);
+            set_builtin_probe_position(preview_position_for_cell(x, y));
+            if (!preview_graphs[index].tick(dt, &err)) {
+                last_graph_error = std::string(graph_build_error_name(err.code));
+                fprintf(stderr, "Preview graph tick failed: %s\n", last_graph_error.c_str());
+                running = false;
+                set_builtin_probe_position(previous_probe_position);
+                return;
+            }
+        }
+    }
+    set_builtin_probe_position(previous_probe_position);
+
+    if (!refresh_preview_samples()) {
+        running = false;
     }
 }
 
@@ -288,7 +325,12 @@ NodeId App::spawn_node(const char* type_name) {
         return 0;
     }
 
+    mark_preview_dirty();
     return id;
+}
+
+void App::mark_preview_dirty() {
+    preview_graphs_dirty = true;
 }
 
 void App::delete_node(NodeId id) {
@@ -306,6 +348,7 @@ void App::delete_node(NodeId id) {
         graph.nodes.end());
 
     rebuild_graph(graph, &last_graph_error);
+    mark_preview_dirty();
 }
 
 bool App::try_add_connection(NodeId source_node_id, std::size_t source_socket_index,
@@ -326,49 +369,63 @@ bool App::try_add_connection(NodeId source_node_id, std::size_t source_socket_in
     }
 
     last_graph_error.clear();
+    mark_preview_dirty();
     return true;
 }
 
 void App::seed_default_spatial_patch() {
     const NodeId probe_x_id = spawn_node("ProbeX");
     const NodeId probe_y_id = spawn_node("ProbeY");
-    const NodeId frequency_x_id = spawn_node("Constant");
+    const NodeId mirror_x_id = spawn_node("SpatialMirror");
     const NodeId frequency_y_id = spawn_node("Constant");
-    const NodeId multiply_x_id = spawn_node("Multiply");
     const NodeId multiply_y_id = spawn_node("Multiply");
     const NodeId spatial_add_id = spawn_node("Add");
     const NodeId phase_id = spawn_node("Phase");
-    const NodeId animated_add_id = spawn_node("Add");
+    const NodeId time_offset_id = spawn_node("TimeOffset");
     const NodeId sine_id = spawn_node("Sine");
+    const NodeId decay_id = spawn_node("Decay");
+    const NodeId background_id = spawn_node("Constant");
+    const NodeId peak_id = spawn_node("Constant");
+    const NodeId mix_id = spawn_node("Mix");
 
-    if (!probe_x_id || !probe_y_id || !frequency_x_id || !frequency_y_id ||
-        !multiply_x_id || !multiply_y_id || !spatial_add_id ||
-        !phase_id || !animated_add_id || !sine_id) {
+    if (!probe_x_id || !probe_y_id || !mirror_x_id || !frequency_y_id ||
+        !multiply_y_id || !spatial_add_id || !phase_id || !time_offset_id ||
+        !sine_id || !decay_id || !background_id || !peak_id || !mix_id) {
         return;
     }
 
-    if (Node* frequency_x = graph.find_node(frequency_x_id)) {
-        frequency_x->state["value"] = SocketValue{Scalar{4.0f}};
-    }
     if (Node* frequency_y = graph.find_node(frequency_y_id)) {
-        frequency_y->state["value"] = SocketValue{Scalar{2.5f}};
+        frequency_y->state["value"] = SocketValue{Scalar{0.75f}};
     }
     if (Node* phase = graph.find_node(phase_id)) {
-        phase->inputs[0].default_value = SocketValue{Scalar{3.0f}};
-        phase->inputs[0].current = SocketValue{Scalar{3.0f}};
+        phase->inputs[0].default_value = SocketValue{Scalar{1.8f}};
+        phase->inputs[0].current = SocketValue{Scalar{1.8f}};
+    }
+    if (Node* decay = graph.find_node(decay_id)) {
+        decay->inputs[1].default_value = SocketValue{Scalar{0.28f}};
+        decay->inputs[1].current = SocketValue{Scalar{0.28f}};
+    }
+    if (Node* background = graph.find_node(background_id)) {
+        background->state["value"] = SocketValue{Scalar{0.08f}};
+    }
+    if (Node* peak = graph.find_node(peak_id)) {
+        peak->state["value"] = SocketValue{Scalar{1.0f}};
     }
 
-    if (!try_add_connection(probe_x_id, 0, multiply_x_id, 0)) return;
-    if (!try_add_connection(frequency_x_id, 0, multiply_x_id, 1)) return;
+    if (!try_add_connection(probe_x_id, 0, mirror_x_id, 0)) return;
     if (!try_add_connection(probe_y_id, 0, multiply_y_id, 0)) return;
     if (!try_add_connection(frequency_y_id, 0, multiply_y_id, 1)) return;
-    if (!try_add_connection(multiply_x_id, 0, spatial_add_id, 0)) return;
+    if (!try_add_connection(mirror_x_id, 0, spatial_add_id, 0)) return;
     if (!try_add_connection(multiply_y_id, 0, spatial_add_id, 1)) return;
-    if (!try_add_connection(spatial_add_id, 0, animated_add_id, 0)) return;
-    if (!try_add_connection(phase_id, 0, animated_add_id, 1)) return;
-    if (!try_add_connection(animated_add_id, 0, sine_id, 0)) return;
+    if (!try_add_connection(phase_id, 0, time_offset_id, 0)) return;
+    if (!try_add_connection(spatial_add_id, 0, time_offset_id, 1)) return;
+    if (!try_add_connection(time_offset_id, 0, sine_id, 0)) return;
+    if (!try_add_connection(sine_id, 0, decay_id, 0)) return;
+    if (!try_add_connection(background_id, 0, mix_id, 0)) return;
+    if (!try_add_connection(peak_id, 0, mix_id, 1)) return;
+    if (!try_add_connection(decay_id, 0, mix_id, 2)) return;
 
-    preview_node_id = sine_id;
+    preview_node_id = mix_id;
     preview_output_socket_index = 0;
 }
 
@@ -379,41 +436,69 @@ Vec2 App::preview_probe_center() const {
     };
 }
 
-std::optional<float> App::sample_preview_output(Vec2 position) const {
+Vec2 App::preview_position_for_cell(int x, int y) const {
+    const float fx = preview_grid_width > 1 ? (float)x / (float)(preview_grid_width - 1) : 0.0f;
+    const float fy = preview_grid_height > 1 ? (float)y / (float)(preview_grid_height - 1) : 0.0f;
+    return Vec2{
+        preview_x_min + fx * (preview_x_max - preview_x_min),
+        preview_y_min + fy * (preview_y_max - preview_y_min),
+    };
+}
+
+std::optional<float> App::extract_preview_output(const Graph& source_graph) const {
     if (preview_node_id == 0) {
         return std::nullopt;
     }
 
-    const Node* live_node = graph.find_node(preview_node_id);
-    if (!live_node || preview_output_socket_index >= (int)live_node->outputs.size()) {
+    const Node* source_node = source_graph.find_node(preview_node_id);
+    if (!source_node || preview_output_socket_index >= (int)source_node->outputs.size()) {
         return std::nullopt;
     }
 
-    if (live_node->outputs[(std::size_t)preview_output_socket_index].type != ValueType::Scalar) {
+    if (source_node->outputs[(std::size_t)preview_output_socket_index].type != ValueType::Scalar) {
         return std::nullopt;
     }
 
-    Graph preview_graph = graph;
-    preview_graph.initialized = false;
+    return std::get<Scalar>(source_node->outputs[(std::size_t)preview_output_socket_index].current);
+}
+
+bool App::rebuild_preview_graphs() {
+    preview_graphs.clear();
+    preview_samples.assign((std::size_t)(preview_grid_width * preview_grid_height), 0.0f);
+    preview_graphs.reserve((std::size_t)(preview_grid_width * preview_grid_height));
+
     const Vec2 previous_probe_position = current_builtin_probe_position();
-    set_builtin_probe_position(position);
-
     GraphBuildError err;
-    if (!preview_graph.init_pass(&err)) {
-        set_builtin_probe_position(previous_probe_position);
-        return std::nullopt;
+    for (int y = 0; y < preview_grid_height; ++y) {
+        for (int x = 0; x < preview_grid_width; ++x) {
+            Graph preview_graph = graph;
+            preview_graph.initialized = false;
+            set_builtin_probe_position(preview_position_for_cell(x, y));
+            if (!preview_graph.init_pass(&err)) {
+                last_graph_error = std::string(graph_build_error_name(err.code));
+                fprintf(stderr, "Preview graph init failed: %s\n", last_graph_error.c_str());
+                set_builtin_probe_position(previous_probe_position);
+                return false;
+            }
+            preview_graphs.push_back(std::move(preview_graph));
+        }
     }
-
-    const Node* preview_node = preview_graph.find_node(preview_node_id);
-    if (!preview_node || preview_output_socket_index >= (int)preview_node->outputs.size()) {
-        set_builtin_probe_position(previous_probe_position);
-        return std::nullopt;
-    }
-
-    const Scalar sample =
-        std::get<Scalar>(preview_node->outputs[(std::size_t)preview_output_socket_index].current);
     set_builtin_probe_position(previous_probe_position);
-    return sample;
+    preview_graphs_dirty = false;
+    return refresh_preview_samples();
+}
+
+bool App::refresh_preview_samples() {
+    if (preview_graphs.size() != (std::size_t)(preview_grid_width * preview_grid_height)) {
+        return false;
+    }
+
+    for (std::size_t i = 0; i < preview_graphs.size(); ++i) {
+        const std::optional<float> sample = extract_preview_output(preview_graphs[i]);
+        preview_samples[i] = sample.value_or(0.0f);
+    }
+
+    return true;
 }
 
 void App::draw_node(Node& n) {
@@ -441,6 +526,7 @@ void App::draw_node(Node& n) {
                 if (edit_value_widget("Default", s.type, editable, s.range)) {
                     s.default_value = editable;
                     s.current = editable;
+                    mark_preview_dirty();
                 }
                 ImGui::Text("Current: %s", format_value(s.current).c_str());
                 ImGui::PopID();
@@ -478,6 +564,7 @@ void App::draw_node(Node& n) {
                 SocketValue editable = val;
                 if (edit_value_widget("Value", vt, editable)) {
                     n.state[key] = editable;
+                    mark_preview_dirty();
                 }
                 ImGui::Text("Current: %s", format_value(n.state.at(key)).c_str());
                 ImGui::PopID();
@@ -521,6 +608,7 @@ void App::draw_connections_panel() {
         if (ImGui::SmallButton("Remove")) {
             graph.connections.erase(graph.connections.begin() + (long)i);
             rebuild_graph(graph, &last_graph_error);
+            mark_preview_dirty();
             ImGui::PopID();
             return;
         }
@@ -660,6 +748,7 @@ void App::draw_field_preview_panel() {
                 preview_node_id = node->id;
                 preview_output_socket_index = 0;
                 preview_node = node;
+                refresh_preview_samples();
             }
             if (selected) {
                 ImGui::SetItemDefaultFocus();
@@ -690,6 +779,7 @@ void App::draw_field_preview_panel() {
             const bool selected = ((int)output_index == preview_output_socket_index);
             if (ImGui::Selectable(preview_node->outputs[output_index].name.c_str(), selected)) {
                 preview_output_socket_index = (int)output_index;
+                refresh_preview_samples();
             }
             if (selected) {
                 ImGui::SetItemDefaultFocus();
@@ -712,6 +802,7 @@ void App::draw_field_preview_panel() {
         preview_x_min = x_bounds[0];
         preview_x_max = x_bounds[1];
         normalize_bounds(preview_x_min, preview_x_max);
+        mark_preview_dirty();
     }
 
     float y_bounds[2] = { preview_y_min, preview_y_max };
@@ -719,6 +810,7 @@ void App::draw_field_preview_panel() {
         preview_y_min = y_bounds[0];
         preview_y_max = y_bounds[1];
         normalize_bounds(preview_y_min, preview_y_max);
+        mark_preview_dirty();
     }
 
     if (ImGui::Button("Reset Domain")) {
@@ -726,23 +818,26 @@ void App::draw_field_preview_panel() {
         preview_x_max = 1.0f;
         preview_y_min = 0.0f;
         preview_y_max = 1.0f;
+        mark_preview_dirty();
     }
 
-    constexpr int grid_width = 16;
-    constexpr int grid_height = 10;
+    if (preview_graphs_dirty) {
+        if (!rebuild_preview_graphs()) {
+            ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.45f, 1.0f),
+                               "Preview rebuild failed: %s", last_graph_error.c_str());
+            return;
+        }
+    }
+
     constexpr float cell_size = 22.0f;
     constexpr float cell_padding = 3.0f;
     const ImVec2 origin = ImGui::GetCursorScreenPos();
     ImDrawList* draw_list = ImGui::GetWindowDrawList();
 
-    for (int y = 0; y < grid_height; ++y) {
-        for (int x = 0; x < grid_width; ++x) {
-            const float fx = grid_width > 1 ? (float)x / (float)(grid_width - 1) : 0.0f;
-            const float fy = grid_height > 1 ? (float)y / (float)(grid_height - 1) : 0.0f;
-            const float sample_x = preview_x_min + fx * (preview_x_max - preview_x_min);
-            const float sample_y = preview_y_min + fy * (preview_y_max - preview_y_min);
-            const std::optional<float> sample = sample_preview_output(Vec2{sample_x, sample_y});
-            const float value = std::clamp(sample.value_or(0.0f), 0.0f, 1.0f);
+    for (int y = 0; y < preview_grid_height; ++y) {
+        for (int x = 0; x < preview_grid_width; ++x) {
+            const std::size_t index = (std::size_t)(y * preview_grid_width + x);
+            const float value = std::clamp(preview_samples[index], 0.0f, 1.0f);
 
             const ImVec2 p1{
                 origin.x + x * (cell_size + cell_padding),
@@ -757,13 +852,13 @@ void App::draw_field_preview_panel() {
     }
 
     ImGui::Dummy(ImVec2(
-        grid_width * (cell_size + cell_padding),
-        grid_height * (cell_size + cell_padding)));
+        preview_grid_width * (cell_size + cell_padding),
+        preview_grid_height * (cell_size + cell_padding)));
     const Vec2 center = preview_probe_center();
     ImGui::Text("Domain: X %.2f..%.2f, Y %.2f..%.2f",
                 preview_x_min, preview_x_max, preview_y_min, preview_y_max);
     ImGui::Text("Inspector probe center: [%.2f, %.2f]", center[0], center[1]);
-    ImGui::Text("Prototype preview: copies the current graph and samples it per probe.");
+    ImGui::Text("Prototype preview: one persistent graph state per sampled probe.");
 }
 
 void App::draw_debug_panel() {
@@ -793,11 +888,19 @@ void App::draw_debug_panel() {
     ImGui::SameLine();
     if (ImGui::Button("Multiply"))      spawn_node("Multiply");
     ImGui::SameLine();
+    if (ImGui::Button("Mix"))           spawn_node("Mix");
+    ImGui::SameLine();
     if (ImGui::Button("Sine"))          spawn_node("Sine");
+    ImGui::SameLine();
+    if (ImGui::Button("Time Offset"))   spawn_node("TimeOffset");
+    ImGui::SameLine();
+    if (ImGui::Button("Decay"))         spawn_node("Decay");
     ImGui::SameLine();
     if (ImGui::Button("ProbeX"))        spawn_node("ProbeX");
     ImGui::SameLine();
     if (ImGui::Button("ProbeY"))        spawn_node("ProbeY");
+    ImGui::SameLine();
+    if (ImGui::Button("Spatial Mirror")) spawn_node("SpatialMirror");
 
     ImGui::Separator();
     draw_connections_panel();

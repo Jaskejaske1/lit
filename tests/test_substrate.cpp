@@ -160,9 +160,13 @@ int test_vec3_through_variant() {
 
 int test_all_node_types() {
     const auto& all = all_node_types();
-    CHECK(all.size() >= 8);
+    CHECK(all.size() >= 12);
     CHECK(all.count("Constant") == 1);
     CHECK(all.count("ConstantVec3") == 1);
+    CHECK(all.count("Mix") == 1);
+    CHECK(all.count("TimeOffset") == 1);
+    CHECK(all.count("SpatialMirror") == 1);
+    CHECK(all.count("Decay") == 1);
     CHECK(all.count("Multiply") == 1);
     CHECK(all.count("Sine") == 1);
     CHECK(all.count("ProbeX") == 1);
@@ -383,6 +387,86 @@ int test_sine_node_maps_phase_to_unit_interval() {
     return 0;
 }
 
+int test_mix_node_lerps_between_inputs() {
+    const NodeType* mix = find_node_type("Mix");
+    CHECK(mix != nullptr);
+
+    Node n = make_node(*mix, 65, "Mix");
+    n.inputs[0].current = SocketValue{Scalar{0.2f}};
+    n.inputs[1].current = SocketValue{Scalar{1.0f}};
+    n.inputs[2].current = SocketValue{Scalar{0.25f}};
+    n.type->evaluate(n, 0.0f, 0.0f, true);
+    CHECK(std::abs(std::get<Scalar>(n.outputs[0].current) - 0.4f) < 0.0001f);
+
+    n.inputs[2].current = SocketValue{Scalar{2.0f}};
+    n.type->evaluate(n, 0.0f, 0.0f, true);
+    CHECK(std::get<Scalar>(n.outputs[0].current) == 1.0f);
+
+    PASS("Mix node interpolates and clamps the blend factor");
+    return 0;
+}
+
+int test_time_offset_wraps_normalized_signal() {
+    const NodeType* time_offset = find_node_type("TimeOffset");
+    CHECK(time_offset != nullptr);
+
+    Node n = make_node(*time_offset, 66, "TimeOffset");
+    n.inputs[0].current = SocketValue{Scalar{0.9f}};
+    n.inputs[1].current = SocketValue{Scalar{0.3f}};
+    n.type->evaluate(n, 0.0f, 0.0f, true);
+    CHECK(std::abs(std::get<Scalar>(n.outputs[0].current) - 0.2f) < 0.0001f);
+
+    n.inputs[0].current = SocketValue{Scalar{0.1f}};
+    n.inputs[1].current = SocketValue{Scalar{-0.4f}};
+    n.type->evaluate(n, 0.0f, 0.0f, true);
+    CHECK(std::abs(std::get<Scalar>(n.outputs[0].current) - 0.7f) < 0.0001f);
+
+    PASS("TimeOffset node wraps normalized scalar signals");
+    return 0;
+}
+
+int test_spatial_mirror_folds_position_around_center() {
+    const NodeType* spatial_mirror = find_node_type("SpatialMirror");
+    CHECK(spatial_mirror != nullptr);
+
+    Node n = make_node(*spatial_mirror, 67, "SpatialMirror");
+    n.inputs[0].current = SocketValue{Scalar{0.25f}};
+    n.inputs[1].current = SocketValue{Scalar{0.5f}};
+    n.inputs[2].current = SocketValue{Scalar{0.5f}};
+    n.type->evaluate(n, 0.0f, 0.0f, true);
+    CHECK(std::abs(std::get<Scalar>(n.outputs[0].current) - 0.5f) < 0.0001f);
+
+    n.inputs[0].current = SocketValue{Scalar{0.75f}};
+    n.type->evaluate(n, 0.0f, 0.0f, true);
+    CHECK(std::abs(std::get<Scalar>(n.outputs[0].current) - 0.5f) < 0.0001f);
+
+    PASS("SpatialMirror node folds both halves onto one mirrored coordinate");
+    return 0;
+}
+
+int test_decay_node_holds_peaks_and_decays_over_time() {
+    const NodeType* decay = find_node_type("Decay");
+    CHECK(decay != nullptr);
+
+    Node n = make_node(*decay, 68, "Decay");
+    n.inputs[0].current = SocketValue{Scalar{1.0f}};
+    n.inputs[1].current = SocketValue{Scalar{0.5f}};
+    n.type->evaluate(n, 0.0f, 0.0f, true);
+    CHECK(std::get<Scalar>(n.outputs[0].current) == 1.0f);
+    CHECK(std::get<Scalar>(n.state["prev_value"]) == 1.0f);
+
+    n.inputs[0].current = SocketValue{Scalar{0.0f}};
+    n.type->evaluate(n, 0.5f, 0.5f, false);
+    CHECK(std::abs(std::get<Scalar>(n.outputs[0].current) - std::exp(-1.0f)) < 0.0001f);
+
+    n.inputs[0].current = SocketValue{Scalar{0.8f}};
+    n.type->evaluate(n, 0.1f, 0.6f, false);
+    CHECK(std::get<Scalar>(n.outputs[0].current) == 0.8f);
+
+    PASS("Decay node preserves peaks and releases exponentially");
+    return 0;
+}
+
 // ----------------------------------------------------------------------------
 
 int main() {
@@ -403,6 +487,10 @@ int main() {
     rc |= test_multiply_node_multiplies_inputs();
     rc |= test_probe_coordinate_nodes_read_sample_position();
     rc |= test_sine_node_maps_phase_to_unit_interval();
+    rc |= test_mix_node_lerps_between_inputs();
+    rc |= test_time_offset_wraps_normalized_signal();
+    rc |= test_spatial_mirror_folds_position_around_center();
+    rc |= test_decay_node_holds_peaks_and_decays_over_time();
 
     if (rc == 0) {
         std::cout << "\nAll substrate tests passed.\n";

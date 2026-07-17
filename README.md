@@ -53,11 +53,13 @@ Current prototype baseline:
 
 - `test_substrate` validates the substrate skeleton and registry behavior.
 - `test_substrate` now also validates graph bake/topo order, init pass behavior, cycle rejection, and the built-in `Phase`, `Multiply`, `Sine`, `ProbeX`, and `ProbeY` nodes.
+- `test_substrate` now also covers the first test-case-oriented modifiers: `Mix`, `TimeOffset`, `SpatialMirror`, and `Decay`.
 - `lit_view` opens a debug console for the current substrate types, including a live `Phase` node whose output advances over time.
 - `lit_view` also lets you tweak disconnected input sockets and node state live, so the current prototype is a real substrate workbench rather than a read-only inspector.
 - `lit_view` now includes a minimal connection editor, so you can wire compatible outputs into inputs and exercise the real graph bake rules from inside the prototype UI.
-- `lit_view` now includes a first field-preview panel: it copies the current graph, samples a selected scalar output over a user-controlled 2D `X,Y` domain, and renders the result as a small animated heatmap.
-- On startup, `lit_view` seeds a default 2D patch that combines `ProbeX`, `ProbeY`, two frequency constants, `Phase`, and `Sine`, so the prototype begins with visible animated spatial structure instead of an empty inspector.
+- `lit_view` now includes a first field-preview panel: each sampled cell owns its own persistent graph state, so temporal nodes can evolve differently across space.
+- The field preview still renders a user-controlled 2D `X,Y` heatmap, but it now does so with time history per probe instead of stateless re-sampling.
+- On startup, `lit_view` now seeds a more effect-like 2D patch built from `ProbeX`, `ProbeY`, `SpatialMirror`, `TimeOffset`, `Sine`, `Decay`, and `Mix`, so the workbench starts closer to the diagonal-sweep ideas in the docs.
 
 This is still a prototype baseline, not the real Phase 1 engine. See
 [build quickstart](docs/engineering-patterns.txt) (top of file) for more.
