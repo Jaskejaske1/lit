@@ -141,6 +141,11 @@ struct PreviewProbeSample {
     float scalar_value = 0.0f;
 };
 
+struct PreviewProbeRuntime {
+    uint64_t probe_id = 0;
+    Graph graph;
+};
+
 struct App {
     static constexpr int preview_grid_width = 16;
     static constexpr int preview_grid_height = 10;
@@ -167,6 +172,7 @@ struct App {
     std::optional<uint64_t> selected_preview_probe_id;
     bool         preview_graphs_dirty = true;
     std::vector<Graph> preview_graphs;
+    std::vector<PreviewProbeRuntime> preview_probe_graphs;
     std::vector<float> preview_samples;
     std::vector<PreviewProbe> preview_probes;
     std::vector<PreviewProbeSample> preview_probe_samples;
@@ -190,7 +196,9 @@ struct App {
     const PreviewProbe* find_preview_probe(uint64_t id) const;
     const PreviewProbe* selected_preview_probe() const;
     void ensure_preview_probe_selection();
+    std::size_t enabled_preview_probe_count() const;
     bool rebuild_preview_graphs();
+    bool rebuild_preview_probe_graphs();
     bool refresh_preview_samples();
     void refresh_preview_probe_samples();
     std::optional<float> extract_preview_output(const Graph& source_graph) const;
@@ -289,6 +297,11 @@ void App::tick(float dt) {
             return;
         }
     }
+    if (preview_graphs_dirty || preview_probe_graphs.size() != enabled_preview_probe_count()) {
+        if (!rebuild_preview_probe_graphs()) {
+            return;
+        }
+    }
 
     const Vec2 previous_probe_position = current_builtin_probe_position();
     for (int y = 0; y < preview_grid_height; ++y) {
@@ -302,6 +315,22 @@ void App::tick(float dt) {
                 set_builtin_probe_position(previous_probe_position);
                 return;
             }
+        }
+    }
+    set_builtin_probe_position(previous_probe_position);
+
+    for (auto& probe_runtime : preview_probe_graphs) {
+        const PreviewProbe* probe = find_preview_probe(probe_runtime.probe_id);
+        if (!probe || !probe->enabled) {
+            continue;
+        }
+        set_builtin_probe_position(preview_position_from_normalized(probe->normalized_position));
+        if (!probe_runtime.graph.tick(dt, &err)) {
+            last_graph_error = std::string(graph_build_error_name(err.code));
+            fprintf(stderr, "Preview probe graph tick failed: %s\n", last_graph_error.c_str());
+            running = false;
+            set_builtin_probe_position(previous_probe_position);
+            return;
         }
     }
     set_builtin_probe_position(previous_probe_position);
@@ -562,6 +591,16 @@ void App::ensure_preview_probe_selection() {
     selected_preview_probe_id.reset();
 }
 
+std::size_t App::enabled_preview_probe_count() const {
+    std::size_t count = 0;
+    for (const auto& probe : preview_probes) {
+        if (probe.enabled) {
+            ++count;
+        }
+    }
+    return count;
+}
+
 std::optional<float> App::extract_preview_output(const Graph& source_graph) const {
     if (preview_node_id == 0) {
         return std::nullopt;
@@ -601,8 +640,36 @@ bool App::rebuild_preview_graphs() {
         }
     }
     set_builtin_probe_position(previous_probe_position);
-    preview_graphs_dirty = false;
     return refresh_preview_samples();
+}
+
+bool App::rebuild_preview_probe_graphs() {
+    preview_probe_graphs.clear();
+    preview_probe_graphs.reserve(preview_probes.size());
+
+    const Vec2 previous_probe_position = current_builtin_probe_position();
+    GraphBuildError err;
+    for (const auto& probe : preview_probes) {
+        if (!probe.enabled) {
+            continue;
+        }
+
+        PreviewProbeRuntime runtime;
+        runtime.probe_id = probe.id;
+        runtime.graph = graph;
+        runtime.graph.initialized = false;
+        set_builtin_probe_position(preview_position_from_normalized(probe.normalized_position));
+        if (!runtime.graph.init_pass(&err)) {
+            last_graph_error = std::string(graph_build_error_name(err.code));
+            fprintf(stderr, "Preview probe graph init failed: %s\n", last_graph_error.c_str());
+            set_builtin_probe_position(previous_probe_position);
+            return false;
+        }
+        preview_probe_graphs.push_back(std::move(runtime));
+    }
+    set_builtin_probe_position(previous_probe_position);
+    preview_graphs_dirty = false;
+    return true;
 }
 
 bool App::refresh_preview_samples() {
@@ -620,16 +687,19 @@ bool App::refresh_preview_samples() {
 
 void App::refresh_preview_probe_samples() {
     preview_probe_samples.clear();
-    preview_probe_samples.reserve(preview_probes.size());
+    preview_probe_samples.reserve(preview_probe_graphs.size());
 
-    for (const auto& probe : preview_probes) {
-        if (!probe.enabled) {
+    for (const auto& runtime : preview_probe_graphs) {
+        const PreviewProbe* probe = find_preview_probe(runtime.probe_id);
+        if (!probe || !probe->enabled) {
             continue;
         }
+
+        const std::optional<float> exact_sample = extract_preview_output(runtime.graph);
         preview_probe_samples.push_back(PreviewProbeSample{
-            probe.id,
-            preview_position_from_normalized(probe.normalized_position),
-            std::clamp(preview_sample_from_normalized(probe.normalized_position), 0.0f, 1.0f),
+            probe->id,
+            preview_position_from_normalized(probe->normalized_position),
+            std::clamp(exact_sample.value_or(0.0f), 0.0f, 1.0f),
         });
     }
 }
@@ -1053,6 +1123,7 @@ void App::draw_field_preview_panel() {
                 true,
             });
             selected_preview_probe_id = preview_probes.back().id;
+            mark_preview_dirty();
         }
 
         std::optional<uint64_t> probe_to_delete;
@@ -1064,7 +1135,9 @@ void App::draw_field_preview_panel() {
                 selected_preview_probe_id = probe.id;
             }
             ImGui::SameLine();
-            ImGui::Checkbox("Enabled", &probe.enabled);
+            if (ImGui::Checkbox("Enabled", &probe.enabled)) {
+                mark_preview_dirty();
+            }
             ImGui::SameLine();
             if (ImGui::SmallButton("Delete")) {
                 probe_to_delete = probe.id;
@@ -1079,6 +1152,7 @@ void App::draw_field_preview_panel() {
             float normalized[2] = { probe.normalized_position[0], probe.normalized_position[1] };
             if (ImGui::SliderFloat2("Normalized XY", normalized, 0.0f, 1.0f)) {
                 probe.normalized_position = Vec2{normalized[0], normalized[1]};
+                mark_preview_dirty();
             }
 
             const Vec2 world = preview_position_from_normalized(probe.normalized_position);
@@ -1097,6 +1171,7 @@ void App::draw_field_preview_panel() {
             if (selected_preview_probe_id.has_value() && *selected_preview_probe_id == *probe_to_delete) {
                 selected_preview_probe_id.reset();
             }
+            mark_preview_dirty();
             ensure_preview_probe_selection();
         } else {
             ensure_preview_probe_selection();
