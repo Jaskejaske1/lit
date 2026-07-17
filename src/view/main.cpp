@@ -1891,18 +1891,54 @@ void App::draw_field_preview_panel() {
                     selected_probe->fixture.position[0],
                     selected_probe->fixture.position[1],
                     selected_probe->fixture.position[2]);
+        const float selected_probe_slice_value =
+            world_axis_value(selected_probe->fixture.position, preview_slice_axis);
+        const float selected_probe_slice_delta = selected_probe_slice_value - preview_slice;
+        ImGui::Text("Selected %s: %.3f  Current slice %s: %.3f  Delta: %+0.3f",
+                    world_axis_name(preview_slice_axis),
+                    selected_probe_slice_value,
+                    world_axis_name(preview_slice_axis),
+                    preview_slice,
+                    selected_probe_slice_delta);
         if (const PreviewProbeSample* selected_sample = find_preview_probe_sample(selected_probe->fixture.id)) {
+            Vec3 selected_slice_position = selected_probe->fixture.position;
+            set_world_axis_value(selected_slice_position, preview_slice_axis, preview_slice);
+            const PreviewOutputSample slice_sample = preview_sample_from_world(selected_slice_position);
+
             if (selected_sample->preview_scalar_value.has_value()) {
-                ImGui::Text("Selected preview sample: %.3f", *selected_sample->preview_scalar_value);
+                const float exact_value = *selected_sample->preview_scalar_value;
+                ImGui::Text("Exact probe sample: %.3f", exact_value);
+                if (slice_sample.scalar_value.has_value()) {
+                    const float slice_value = *slice_sample.scalar_value;
+                    ImGui::Text("Current heatmap slice sample: %.3f  Delta: %+0.3f",
+                                slice_value,
+                                exact_value - slice_value);
+                }
             } else if (selected_sample->preview_color_value.has_value()) {
-                const Vec3 color = *selected_sample->preview_color_value;
-                ImGui::ColorButton("Selected Preview Color",
-                                   ImVec4(color[0], color[1], color[2], 1.0f),
+                const Vec3 exact_color = *selected_sample->preview_color_value;
+                ImGui::ColorButton("Selected Exact Preview Color",
+                                   ImVec4(exact_color[0], exact_color[1], exact_color[2], 1.0f),
                                    ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoDragDrop,
                                    ImVec2(24.0f, 24.0f));
                 ImGui::SameLine();
-                ImGui::Text("Selected preview color: [%.3f, %.3f, %.3f]",
-                            color[0], color[1], color[2]);
+                ImGui::Text("Exact probe color: [%.3f, %.3f, %.3f]",
+                            exact_color[0], exact_color[1], exact_color[2]);
+
+                if (slice_sample.color_value.has_value()) {
+                    const Vec3 slice_color = *slice_sample.color_value;
+                    const float dr = exact_color[0] - slice_color[0];
+                    const float dg = exact_color[1] - slice_color[1];
+                    const float db = exact_color[2] - slice_color[2];
+                    ImGui::ColorButton("Selected Slice Preview Color",
+                                       ImVec4(slice_color[0], slice_color[1], slice_color[2], 1.0f),
+                                       ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoDragDrop,
+                                       ImVec2(24.0f, 24.0f));
+                    ImGui::SameLine();
+                    ImGui::Text("Current heatmap slice color: [%.3f, %.3f, %.3f]",
+                                slice_color[0], slice_color[1], slice_color[2]);
+                    ImGui::Text("Color delta magnitude: %.3f",
+                                std::sqrt((dr * dr) + (dg * dg) + (db * db)));
+                }
             }
         }
     } else {

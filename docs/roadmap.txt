@@ -92,6 +92,7 @@ Phase 1 - Real substrate skeleton
   - The seeded default sweep now derives its bar coordinate through `Project3D`, so the baseline graph is structurally ready for height/depth-sensitive rig edits instead of staying frozen on an `XY`-only spatial primitive.
   - The seeded `Bar L*`/`Bar R*` rig now carries a shallow mirrored `Z` profile by default, so the first-launch `XZ` and `YZ` slices are inspecting real staged geometry instead of an all-flat fallback layout.
   - That slice view can now snap directly to the selected probe's plane, which makes the current staged rig materially easier to inspect without hand-chasing the slice coordinate whenever a fixture sits above or below the current cut.
+  - The selected-probe summary now explicitly compares the probe's exact 3D output against the current heatmap slice sample, so staged fixtures expose their slice-vs-fixture mismatch directly instead of forcing the user to infer it from the heatmap and labels.
   - This is meaningful Builder progress, but it is still below the Phase 1 exit criterion because the preview is 2D, the runtime is not baked, and the test-case effect is not yet the diagonal-bars sweep.
 
 Phase 2 - Packaging (substrate module to Intention)
