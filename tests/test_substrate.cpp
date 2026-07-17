@@ -184,7 +184,7 @@ int test_fixture_probe_trait_helpers() {
 
 int test_all_node_types() {
     const auto& all = all_node_types();
-    CHECK(all.size() >= 21);
+    CHECK(all.size() >= 22);
     CHECK(all.count("BPMTap") == 1);
     CHECK(all.count("Constant") == 1);
     CHECK(all.count("ConstantVec3") == 1);
@@ -204,6 +204,7 @@ int test_all_node_types() {
     CHECK(all.count("ProbeY") == 1);
     CHECK(all.count("ProbeZ") == 1);
     CHECK(all.count("Project2D") == 1);
+    CHECK(all.count("Project3D") == 1);
 
     PASS("all_node_types() enumerates registry");
     return 0;
@@ -448,6 +449,31 @@ int test_project2d_node_projects_onto_normalized_axis() {
     return 0;
 }
 
+int test_project3d_node_projects_onto_normalized_axis() {
+    const NodeType* project3d = find_node_type("Project3D");
+    CHECK(project3d != nullptr);
+
+    Node n = make_node(*project3d, 66, "Project3D");
+    n.inputs[0].current = SocketValue{Scalar{0.36f}};
+    n.inputs[1].current = SocketValue{Scalar{0.15f}};
+    n.inputs[2].current = SocketValue{Scalar{0.50f}};
+    n.inputs[3].current = SocketValue{Scalar{3.0f}};
+    n.inputs[4].current = SocketValue{Scalar{4.0f}};
+    n.inputs[5].current = SocketValue{Scalar{12.0f}};
+    n.inputs[6].current = SocketValue{Scalar{0.1f}};
+    n.type->evaluate(n, 0.0f, 0.0f, true);
+    CHECK(std::abs(std::get<Scalar>(n.outputs[0].current) - 0.6907692f) < 0.0001f);
+
+    n.inputs[3].current = SocketValue{Scalar{0.0f}};
+    n.inputs[4].current = SocketValue{Scalar{0.0f}};
+    n.inputs[5].current = SocketValue{Scalar{0.0f}};
+    n.type->evaluate(n, 0.0f, 0.0f, true);
+    CHECK(std::abs(std::get<Scalar>(n.outputs[0].current) - 0.1f) < 0.0001f);
+
+    PASS("Project3D node projects XYZ onto a normalized 3D axis");
+    return 0;
+}
+
 int test_sine_node_maps_phase_to_unit_interval() {
     const NodeType* sine = find_node_type("Sine");
     CHECK(sine != nullptr);
@@ -682,6 +708,7 @@ int main() {
     rc |= test_multiply_node_multiplies_inputs();
     rc |= test_probe_coordinate_nodes_read_sample_position();
     rc |= test_project2d_node_projects_onto_normalized_axis();
+    rc |= test_project3d_node_projects_onto_normalized_axis();
     rc |= test_sine_node_maps_phase_to_unit_interval();
     rc |= test_ramp_node_wraps_phase_like_signal();
     rc |= test_mix_node_lerps_between_inputs();

@@ -60,7 +60,7 @@ Phase 1 - Real substrate skeleton
 - This is the biggest single phase. Substrate + visual field preview + bake is most of the project.
 - Current prototype slice on July 17, 2026:
   - Registry-backed nodes, graph bake/topo order, init pass, and live ticking are working on NixOS.
-  - The current built-in node set now includes `Constant`, `ConstantVec3`, `Phase`, `Ramp`, `Add`, `Multiply`, `Sine`, `Mix`, `Clamp`, `TimeOffset`, `SpatialMirror`, `Decay`, `ProbeX`, `ProbeY`, `ProbeZ`, and `Project2D`.
+  - The current built-in node set now includes `Constant`, `ConstantVec3`, `Phase`, `Ramp`, `Add`, `Multiply`, `Sine`, `Mix`, `Clamp`, `TimeOffset`, `SpatialMirror`, `Decay`, `ProbeX`, `ProbeY`, `ProbeZ`, `Project2D`, and `Project3D`.
   - `lit_view` can edit disconnected inputs/state, create connections, and preview scalar or `Vec3` outputs over a sampled 2D `X,Y` grid with explicit user-controlled bounds.
   - The node inspector now also exposes node renaming, per-node comments, and bypass state directly in the node header, which brings the current workbench closer to the data-model/ideas docs instead of hiding graph identity and intent in code only.
   - The current connection editor now filters out wrong-type sockets, already-occupied inputs, and self-connections up front, so the Builder workbench avoids many guaranteed-invalid wiring attempts before the graph validator even runs.
@@ -89,6 +89,7 @@ Phase 1 - Real substrate skeleton
   - Those overlay probe dots are now directly draggable in `X/Y` while preserving their stored `Z`, which makes rig-layout iteration happen inside the field preview instead of forcing every position edit through inspector numbers.
   - The probe editor now also supports mirrored-pair locking and explicit pair sync for the current `Bar L*`/`Bar R*` rig, which makes symmetry-preserving layout edits substantially less manual while the forcing-function test case is still a left/right mirrored bar sweep.
   - That Builder-side field preview can now switch between `XY`, `XZ`, and `YZ` slices, so the same prototype can inspect height/depth structure directly instead of treating every 3D experiment as a flattened `XY` heatmap; the probe overlay and drag path now follow the active slice as well.
+  - The seeded default sweep now derives its bar coordinate through `Project3D`, so the baseline graph is structurally ready for height/depth-sensitive rig edits instead of staying frozen on an `XY`-only spatial primitive.
   - This is meaningful Builder progress, but it is still below the Phase 1 exit criterion because the preview is 2D, the runtime is not baked, and the test-case effect is not yet the diagonal-bars sweep.
 
 Phase 2 - Packaging (substrate module to Intention)
