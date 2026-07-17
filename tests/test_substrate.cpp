@@ -184,7 +184,7 @@ int test_fixture_probe_trait_helpers() {
 
 int test_all_node_types() {
     const auto& all = all_node_types();
-    CHECK(all.size() >= 22);
+    CHECK(all.size() >= 23);
     CHECK(all.count("BPMTap") == 1);
     CHECK(all.count("Constant") == 1);
     CHECK(all.count("ConstantVec3") == 1);
@@ -205,6 +205,7 @@ int test_all_node_types() {
     CHECK(all.count("ProbeZ") == 1);
     CHECK(all.count("Project2D") == 1);
     CHECK(all.count("Project3D") == 1);
+    CHECK(all.count("Band") == 1);
 
     PASS("all_node_types() enumerates registry");
     return 0;
@@ -474,6 +475,30 @@ int test_project3d_node_projects_onto_normalized_axis() {
     return 0;
 }
 
+int test_band_node_windows_wrapped_positions() {
+    const NodeType* band = find_node_type("Band");
+    CHECK(band != nullptr);
+
+    Node n = make_node(*band, 67, "Band");
+    n.inputs[0].current = SocketValue{Scalar{0.02f}};
+    n.inputs[1].current = SocketValue{Scalar{0.98f}};
+    n.inputs[2].current = SocketValue{Scalar{0.08f}};
+    n.inputs[3].current = SocketValue{Scalar{0.12f}};
+    n.type->evaluate(n, 0.0f, 0.0f, true);
+    CHECK(std::abs(std::get<Scalar>(n.outputs[0].current) - 1.0f) < 0.0001f);
+
+    n.inputs[0].current = SocketValue{Scalar{0.08f}};
+    n.type->evaluate(n, 0.0f, 0.0f, true);
+    CHECK(std::abs(std::get<Scalar>(n.outputs[0].current) - 0.5f) < 0.0001f);
+
+    n.inputs[0].current = SocketValue{Scalar{0.40f}};
+    n.type->evaluate(n, 0.0f, 0.0f, true);
+    CHECK(std::abs(std::get<Scalar>(n.outputs[0].current) - 0.0f) < 0.0001f);
+
+    PASS("Band node shapes wrapped scalar positions into a softened window");
+    return 0;
+}
+
 int test_sine_node_maps_phase_to_unit_interval() {
     const NodeType* sine = find_node_type("Sine");
     CHECK(sine != nullptr);
@@ -709,6 +734,7 @@ int main() {
     rc |= test_probe_coordinate_nodes_read_sample_position();
     rc |= test_project2d_node_projects_onto_normalized_axis();
     rc |= test_project3d_node_projects_onto_normalized_axis();
+    rc |= test_band_node_windows_wrapped_positions();
     rc |= test_sine_node_maps_phase_to_unit_interval();
     rc |= test_ramp_node_wraps_phase_like_signal();
     rc |= test_mix_node_lerps_between_inputs();

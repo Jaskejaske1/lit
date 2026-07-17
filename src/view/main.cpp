@@ -640,7 +640,7 @@ void App::seed_default_spatial_patch() {
     const NodeId sweep_period_id = spawn_node_named("Multiply", "Sweep Period");
     const NodeId phase_id = spawn_node_named("Phase", "Sweep Phase");
     const NodeId time_offset_id = spawn_node_named("TimeOffset", "Phase Offset");
-    const NodeId ramp_id = spawn_node_named("Ramp", "Sweep Ramp");
+    const NodeId band_id = spawn_node_named("Band", "Sweep Band");
     const NodeId decay_id = spawn_node_named("Decay", "Trail Decay");
     const NodeId base_tilt_id = spawn_node_named("Constant", "Base Tilt");
     const NodeId peak_tilt_id = spawn_node_named("Constant", "Peak Tilt");
@@ -654,7 +654,7 @@ void App::seed_default_spatial_patch() {
     if (!probe_x_id || !probe_y_id || !probe_z_id || !mirror_x_id || !project3d_id ||
         !bpm_tap_id || !beats_per_sweep_id ||
         !sweep_period_id || !phase_id || !time_offset_id ||
-        !ramp_id || !decay_id || !base_tilt_id || !peak_tilt_id || !tilt_mix_id ||
+        !band_id || !decay_id || !base_tilt_id || !peak_tilt_id || !tilt_mix_id ||
         !full_intensity_id ||
         !white_id || !red_id || !color_mix_id || !fixture_driver_id) {
         return;
@@ -677,6 +677,14 @@ void App::seed_default_spatial_patch() {
     if (Node* decay = graph.find_node(decay_id)) {
         decay->inputs[1].default_value = SocketValue{Scalar{0.28f}};
         decay->inputs[1].current = SocketValue{Scalar{0.28f}};
+    }
+    if (Node* band = graph.find_node(band_id)) {
+        band->inputs[1].default_value = SocketValue{Scalar{0.0f}};
+        band->inputs[1].current = SocketValue{Scalar{0.0f}};
+        band->inputs[2].default_value = SocketValue{Scalar{0.10f}};
+        band->inputs[2].current = SocketValue{Scalar{0.10f}};
+        band->inputs[3].default_value = SocketValue{Scalar{0.10f}};
+        band->inputs[3].current = SocketValue{Scalar{0.10f}};
     }
     if (Node* base_tilt = graph.find_node(base_tilt_id)) {
         base_tilt->state["value"] = SocketValue{Scalar{0.30f}};
@@ -703,8 +711,8 @@ void App::seed_default_spatial_patch() {
     if (!try_add_connection(sweep_period_id, 0, phase_id, 0)) return;
     if (!try_add_connection(phase_id, 0, time_offset_id, 0)) return;
     if (!try_add_connection(project3d_id, 0, time_offset_id, 1)) return;
-    if (!try_add_connection(time_offset_id, 0, ramp_id, 0)) return;
-    if (!try_add_connection(ramp_id, 0, decay_id, 0)) return;
+    if (!try_add_connection(time_offset_id, 0, band_id, 0)) return;
+    if (!try_add_connection(band_id, 0, decay_id, 0)) return;
     if (!try_add_connection(base_tilt_id, 0, tilt_mix_id, 0)) return;
     if (!try_add_connection(peak_tilt_id, 0, tilt_mix_id, 1)) return;
     if (!try_add_connection(decay_id, 0, tilt_mix_id, 2)) return;
@@ -2367,6 +2375,8 @@ void App::draw_debug_panel() {
     if (ImGui::Button("Mix Vec3"))      spawn_node("MixVec3");
     ImGui::SameLine();
     if (ImGui::Button("Clamp"))         spawn_node("Clamp");
+    ImGui::SameLine();
+    if (ImGui::Button("Band"))          spawn_node("Band");
     ImGui::SameLine();
     if (ImGui::Button("Output Dimmer")) spawn_node("OutputDimmer");
     ImGui::SameLine();

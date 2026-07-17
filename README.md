@@ -52,7 +52,7 @@ cmake --build cmake-build/linux
 Current prototype baseline:
 
 - `test_substrate` validates the substrate skeleton and registry behavior.
-- `test_substrate` now also validates graph bake/topo order, init pass behavior, cycle rejection, and the built-in `Phase`, `Ramp`, `Multiply`, `Sine`, `ProbeX`, `ProbeY`, `ProbeZ`, and `Project2D` nodes.
+- `test_substrate` now also validates graph bake/topo order, init pass behavior, cycle rejection, and the built-in `Phase`, `Ramp`, `Band`, `Multiply`, `Sine`, `ProbeX`, `ProbeY`, `ProbeZ`, `Project2D`, and `Project3D` nodes.
 - `test_substrate` now also covers the first test-case-oriented modifiers: `Mix`, `Clamp`, `TimeOffset`, `SpatialMirror`, and `Decay`.
 - `test_substrate` now also covers the minimal fixture/probe helpers that back the Builder-side sample-point model.
 - `test_substrate` now also covers `OutputDimmer` and `OutputTilt`, the first explicit graph-side scalar output primitives for sampled fixtures.
@@ -78,7 +78,7 @@ Current prototype baseline:
 - The probe overlay now uses fixture-driver color when available, so the sampled bar layout reads more like a lighting sketch and less like a pure scalar debug surface.
 - The field preview can now fit its domain bounds directly to the enabled probe layout, which is the first concrete answer to the docs' open "what axes/scale should the Builder show?" question.
 - `lit_view` now includes a first `BPMTap` primitive with manual tap-tempo controls in the node inspector, so tempo is no longer just a hardcoded period hidden inside `Phase`.
-- On startup, `lit_view` now seeds a more effect-like 2D patch built from `BPMTap`, `Phase`, `ProbeX`, `ProbeY`, `SpatialMirror`, `TimeOffset`, `Ramp`, `Decay`, and `Mix`, and it derives sweep period from beat period times a beats-per-sweep constant, so the workbench starts closer to the diagonal-sweep ideas in the docs.
+- On startup, `lit_view` now seeds a more effect-like patch built from `BPMTap`, `Phase`, `ProbeX`, `ProbeY`, `ProbeZ`, `SpatialMirror`, `Project3D`, `TimeOffset`, `Band`, `Decay`, and `Mix`, and it derives sweep period from beat period times a beats-per-sweep constant, so the workbench starts closer to the diagonal-sweep ideas in the docs.
 - `lit_view` can now explicitly reset itself back to that diagonal-sweep baseline, and the seeded graph uses named node instances instead of generic type-number labels.
 - `lit_view` now includes a first search-based quick-add path for node insertion, including `Ctrl+K` focus, arrow-key selection, and `Enter` spawn, so the Builder workbench can keep scaling beyond the original fixed spawn button row.
 - The probe overlay is now directly clickable and draws faint guide lines between grouped bar probes, so the preview reads more like a hanging rig sketch and less like disconnected debug dots.
@@ -89,6 +89,7 @@ Current prototype baseline:
 - The probe editor now includes a `Lock mirrored pairs` workflow plus per-probe `Sync Pair`, so the current `Bar L*`/`Bar R*` rig can stay symmetric while you drag or retune one side instead of manually duplicating every edit.
 - The field preview is no longer locked to `XY@Z`: it can now inspect `XY`, `XZ`, or `YZ` slices, keeps probe dragging in the active plane, and filters the probe overlay to fixtures that actually intersect the current slice.
 - The substrate node library now includes `Project3D`, and the seeded bar sweep patch uses it as its bar-coordinate primitive, so the default graph is ready to react to fixture height/depth edits instead of being structurally capped at `XY` math.
+- The substrate node library now also includes `Band`, and the seeded sweep uses it to shape a wrapped moving window before the decay trail, so the baseline graph reads more like a sweep head plus tail than a fully smeared phase gradient.
 - The seeded preview rig is now shallowly staged across `Z`, so the default `Bar L*`/`Bar R*` geometry is no longer perfectly flat and the current `XZ`/`YZ` preview paths show real structure on first launch.
 - The active preview slice can now snap directly to the selected probe, which makes it much faster to inspect the exact plane a staged fixture lives on instead of manually dialing the slice coordinate to match.
 - The selected-probe panel now compares the probe's exact 3D sample against the currently viewed heatmap slice sample, so staged fixtures no longer require guesswork when the active slice cuts above or below them.

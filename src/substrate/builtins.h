@@ -167,6 +167,39 @@ inline void project3d_evaluate(Node& self, float, float, bool) {
     };
 }
 
+inline void band_evaluate(Node& self, float, float, bool) {
+    Scalar position = std::get<Scalar>(self.inputs[0].current);
+    Scalar center = std::get<Scalar>(self.inputs[1].current);
+    const Scalar width = std::clamp(std::get<Scalar>(self.inputs[2].current), 0.0f, 1.0f);
+    const Scalar feather = std::clamp(std::get<Scalar>(self.inputs[3].current), 0.0f, 1.0f);
+
+    position = std::fmod(position, 1.0f);
+    if (position < 0.0f) {
+        position += 1.0f;
+    }
+
+    center = std::fmod(center, 1.0f);
+    if (center < 0.0f) {
+        center += 1.0f;
+    }
+
+    Scalar distance = std::abs(position - center);
+    distance = std::min(distance, 1.0f - distance);
+
+    const Scalar half_width = width * 0.5f;
+    if (distance <= half_width) {
+        self.outputs[0].current = SocketValue{Scalar{1.0f}};
+        return;
+    }
+    if (feather <= 0.0001f || distance >= (half_width + feather)) {
+        self.outputs[0].current = SocketValue{Scalar{0.0f}};
+        return;
+    }
+
+    const Scalar falloff = (distance - half_width) / feather;
+    self.outputs[0].current = SocketValue{Scalar{std::clamp(1.0f - falloff, 0.0f, 1.0f)}};
+}
+
 inline void mix_evaluate(Node& self, float, float, bool) {
     const Scalar a = std::get<Scalar>(self.inputs[0].current);
     const Scalar b = std::get<Scalar>(self.inputs[1].current);
@@ -451,6 +484,30 @@ inline void register_project3d_node_type() {
     register_node_type(t);
 }
 
+inline void register_band_node_type() {
+    NodeType t;
+    t.name         = "Band";
+    t.display_name = "Band";
+    t.category     = "Modifier";
+    t.inputs.push_back(SocketSpec{
+        "Position", ValueType::Scalar, SocketValue{Scalar{0.0f}}, std::nullopt
+    });
+    t.inputs.push_back(SocketSpec{
+        "Center", ValueType::Scalar, SocketValue{Scalar{0.0f}}, std::nullopt
+    });
+    t.inputs.push_back(SocketSpec{
+        "Width", ValueType::Scalar, SocketValue{Scalar{0.12f}}, std::pair{0.0f, 1.0f}
+    });
+    t.inputs.push_back(SocketSpec{
+        "Feather", ValueType::Scalar, SocketValue{Scalar{0.08f}}, std::pair{0.0f, 1.0f}
+    });
+    t.outputs.push_back(SocketSpec{
+        "Value", ValueType::Scalar, SocketValue{Scalar{0.0f}}, std::nullopt
+    });
+    t.evaluate = &band_evaluate;
+    register_node_type(t);
+}
+
 inline void register_mix_node_type() {
     NodeType t;
     t.name         = "Mix";
@@ -645,6 +702,7 @@ inline void register_builtin_node_types() {
     register_probe_z_node_type();
     register_project2d_node_type();
     register_project3d_node_type();
+    register_band_node_type();
     register_mix_node_type();
     register_mix_vec3_node_type();
     register_clamp_node_type();
