@@ -486,7 +486,7 @@ void App::seed_default_spatial_patch() {
     const NodeId spatial_add_id = spawn_node_named("Add", "Spatial Offset");
     const NodeId phase_id = spawn_node_named("Phase", "Sweep Phase");
     const NodeId time_offset_id = spawn_node_named("TimeOffset", "Phase Offset");
-    const NodeId sine_id = spawn_node_named("Sine", "Sweep Wave");
+    const NodeId ramp_id = spawn_node_named("Ramp", "Sweep Ramp");
     const NodeId decay_id = spawn_node_named("Decay", "Trail Decay");
     const NodeId base_tilt_id = spawn_node_named("Constant", "Base Tilt");
     const NodeId peak_tilt_id = spawn_node_named("Constant", "Peak Tilt");
@@ -499,7 +499,7 @@ void App::seed_default_spatial_patch() {
 
     if (!probe_x_id || !probe_y_id || !mirror_x_id || !frequency_y_id ||
         !multiply_y_id || !spatial_add_id || !phase_id || !time_offset_id ||
-        !sine_id || !decay_id || !base_tilt_id || !peak_tilt_id || !tilt_mix_id ||
+        !ramp_id || !decay_id || !base_tilt_id || !peak_tilt_id || !tilt_mix_id ||
         !full_intensity_id ||
         !white_id || !red_id || !color_mix_id || !fixture_driver_id) {
         return;
@@ -539,8 +539,8 @@ void App::seed_default_spatial_patch() {
     if (!try_add_connection(multiply_y_id, 0, spatial_add_id, 1)) return;
     if (!try_add_connection(phase_id, 0, time_offset_id, 0)) return;
     if (!try_add_connection(spatial_add_id, 0, time_offset_id, 1)) return;
-    if (!try_add_connection(time_offset_id, 0, sine_id, 0)) return;
-    if (!try_add_connection(sine_id, 0, decay_id, 0)) return;
+    if (!try_add_connection(time_offset_id, 0, ramp_id, 0)) return;
+    if (!try_add_connection(ramp_id, 0, decay_id, 0)) return;
     if (!try_add_connection(base_tilt_id, 0, tilt_mix_id, 0)) return;
     if (!try_add_connection(peak_tilt_id, 0, tilt_mix_id, 1)) return;
     if (!try_add_connection(decay_id, 0, tilt_mix_id, 2)) return;
