@@ -708,102 +708,13 @@ bool App::try_add_connection(NodeId source_node_id, std::size_t source_socket_in
 }
 
 void App::seed_default_spatial_patch() {
-    const NodeId probe_x_id = spawn_node_named("ProbeX", "Probe X");
-    const NodeId probe_y_id = spawn_node_named("ProbeY", "Probe Y");
-    const NodeId probe_z_id = spawn_node_named("ProbeZ", "Probe Z");
-    const NodeId mirror_x_id = spawn_node_named("SpatialMirror", "Mirror Symmetry");
-    const NodeId project3d_id = spawn_node_named("Project3D", "Bar Coordinate");
-    const NodeId bpm_tap_id = spawn_node_named("BPMTap", "Sweep Tempo");
-    const NodeId beats_per_sweep_id = spawn_node_named("Constant", "Beats Per Sweep");
-    const NodeId sweep_period_id = spawn_node_named("Multiply", "Sweep Period");
-    const NodeId phase_id = spawn_node_named("Phase", "Sweep Phase");
-    const NodeId time_offset_id = spawn_node_named("TimeOffset", "Phase Offset");
-    const NodeId band_id = spawn_node_named("Band", "Sweep Band");
-    const NodeId decay_id = spawn_node_named("Decay", "Trail Decay");
-    const NodeId base_tilt_id = spawn_node_named("Constant", "Base Tilt");
-    const NodeId peak_tilt_id = spawn_node_named("Constant", "Peak Tilt");
-    const NodeId tilt_mix_id = spawn_node_named("Mix", "Tilt Mix");
-    const NodeId full_intensity_id = spawn_node_named("Constant", "Full Intensity");
-    const NodeId white_id = spawn_node_named("ConstantVec3", "Base White");
-    const NodeId red_id = spawn_node_named("ConstantVec3", "Sweep Red");
-    const NodeId color_mix_id = spawn_node_named("MixVec3", "Color Mix");
-    const NodeId fixture_driver_id = spawn_node_named("SpatialFixtureDriver", "Fixture Driver");
-
-    if (!probe_x_id || !probe_y_id || !probe_z_id || !mirror_x_id || !project3d_id ||
-        !bpm_tap_id || !beats_per_sweep_id ||
-        !sweep_period_id || !phase_id || !time_offset_id ||
-        !band_id || !decay_id || !base_tilt_id || !peak_tilt_id || !tilt_mix_id ||
-        !full_intensity_id ||
-        !white_id || !red_id || !color_mix_id || !fixture_driver_id) {
+    DefaultSpatialPatchIds ids;
+    if (!substrate::seed_default_spatial_patch(graph, next_id, next_connection_id, &ids)) {
         return;
     }
-
-    if (Node* project3d = graph.find_node(project3d_id)) {
-        project3d->inputs[3].default_value = SocketValue{Scalar{0.47f}};
-        project3d->inputs[3].current = SocketValue{Scalar{0.47f}};
-        project3d->inputs[4].default_value = SocketValue{Scalar{0.88f}};
-        project3d->inputs[4].current = SocketValue{Scalar{0.88f}};
-        project3d->inputs[5].default_value = SocketValue{Scalar{0.18f}};
-        project3d->inputs[5].current = SocketValue{Scalar{0.18f}};
-    }
-    if (Node* bpm_tap = graph.find_node(bpm_tap_id)) {
-        bpm_tap->state["bpm"] = SocketValue{Scalar{100.0f}};
-    }
-    if (Node* beats_per_sweep = graph.find_node(beats_per_sweep_id)) {
-        beats_per_sweep->state["value"] = SocketValue{Scalar{3.0f}};
-    }
-    if (Node* decay = graph.find_node(decay_id)) {
-        decay->inputs[1].default_value = SocketValue{Scalar{0.28f}};
-        decay->inputs[1].current = SocketValue{Scalar{0.28f}};
-    }
-    if (Node* band = graph.find_node(band_id)) {
-        band->inputs[1].default_value = SocketValue{Scalar{0.0f}};
-        band->inputs[1].current = SocketValue{Scalar{0.0f}};
-        band->inputs[2].default_value = SocketValue{Scalar{0.10f}};
-        band->inputs[2].current = SocketValue{Scalar{0.10f}};
-        band->inputs[3].default_value = SocketValue{Scalar{0.10f}};
-        band->inputs[3].current = SocketValue{Scalar{0.10f}};
-    }
-    if (Node* base_tilt = graph.find_node(base_tilt_id)) {
-        base_tilt->state["value"] = SocketValue{Scalar{0.30f}};
-    }
-    if (Node* peak_tilt = graph.find_node(peak_tilt_id)) {
-        peak_tilt->state["value"] = SocketValue{Scalar{0.82f}};
-    }
-    if (Node* full_intensity = graph.find_node(full_intensity_id)) {
-        full_intensity->state["value"] = SocketValue{Scalar{1.0f}};
-    }
-    if (Node* white = graph.find_node(white_id)) {
-        white->state["value"] = SocketValue{Vec3{1.0f, 1.0f, 1.0f}};
-    }
-    if (Node* red = graph.find_node(red_id)) {
-        red->state["value"] = SocketValue{Vec3{1.0f, 0.0f, 0.0f}};
-    }
-
-    if (!try_add_connection(probe_x_id, 0, mirror_x_id, 0)) return;
-    if (!try_add_connection(mirror_x_id, 0, project3d_id, 0)) return;
-    if (!try_add_connection(probe_y_id, 0, project3d_id, 1)) return;
-    if (!try_add_connection(probe_z_id, 0, project3d_id, 2)) return;
-    if (!try_add_connection(bpm_tap_id, 1, sweep_period_id, 0)) return;
-    if (!try_add_connection(beats_per_sweep_id, 0, sweep_period_id, 1)) return;
-    if (!try_add_connection(sweep_period_id, 0, phase_id, 0)) return;
-    if (!try_add_connection(phase_id, 0, time_offset_id, 0)) return;
-    if (!try_add_connection(project3d_id, 0, time_offset_id, 1)) return;
-    if (!try_add_connection(time_offset_id, 0, band_id, 0)) return;
-    if (!try_add_connection(band_id, 0, decay_id, 0)) return;
-    if (!try_add_connection(base_tilt_id, 0, tilt_mix_id, 0)) return;
-    if (!try_add_connection(peak_tilt_id, 0, tilt_mix_id, 1)) return;
-    if (!try_add_connection(decay_id, 0, tilt_mix_id, 2)) return;
-    if (!try_add_connection(white_id, 0, color_mix_id, 0)) return;
-    if (!try_add_connection(red_id, 0, color_mix_id, 1)) return;
-    if (!try_add_connection(decay_id, 0, color_mix_id, 2)) return;
-    if (!try_add_connection(full_intensity_id, 0, fixture_driver_id, 0)) return;
-    if (!try_add_connection(tilt_mix_id, 0, fixture_driver_id, 1)) return;
-    if (!try_add_connection(color_mix_id, 0, fixture_driver_id, 2)) return;
-
-    spatial_fixture_driver_node_id = fixture_driver_id;
-    preview_node_id = fixture_driver_id;
-    preview_output_socket_index = 2;
+    spatial_fixture_driver_node_id = ids.spatial_fixture_driver_node_id;
+    preview_node_id = ids.preview_node_id;
+    preview_output_socket_index = ids.preview_output_socket_index;
 }
 
 bool App::reset_default_patch() {
@@ -827,18 +738,11 @@ bool App::reset_default_patch() {
 }
 
 void App::seed_default_preview_probes() {
-    preview_probes = {
-        { FixtureProbe{ next_preview_probe_id++, "Bar L1", Vec3{0.32f, 0.15f, -0.05f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt, FixtureTrait::ColorRGB } }, true },
-        { FixtureProbe{ next_preview_probe_id++, "Bar L2", Vec3{0.28f, 0.30f, -0.025f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt, FixtureTrait::ColorRGB } }, true },
-        { FixtureProbe{ next_preview_probe_id++, "Bar L3", Vec3{0.24f, 0.45f, 0.0f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt, FixtureTrait::ColorRGB } }, true },
-        { FixtureProbe{ next_preview_probe_id++, "Bar L4", Vec3{0.20f, 0.60f, 0.025f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt, FixtureTrait::ColorRGB } }, true },
-        { FixtureProbe{ next_preview_probe_id++, "Bar L5", Vec3{0.16f, 0.75f, 0.05f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt, FixtureTrait::ColorRGB } }, true },
-        { FixtureProbe{ next_preview_probe_id++, "Bar R1", Vec3{0.68f, 0.15f, -0.05f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt, FixtureTrait::ColorRGB } }, true },
-        { FixtureProbe{ next_preview_probe_id++, "Bar R2", Vec3{0.72f, 0.30f, -0.025f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt, FixtureTrait::ColorRGB } }, true },
-        { FixtureProbe{ next_preview_probe_id++, "Bar R3", Vec3{0.76f, 0.45f, 0.0f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt, FixtureTrait::ColorRGB } }, true },
-        { FixtureProbe{ next_preview_probe_id++, "Bar R4", Vec3{0.80f, 0.60f, 0.025f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt, FixtureTrait::ColorRGB } }, true },
-        { FixtureProbe{ next_preview_probe_id++, "Bar R5", Vec3{0.84f, 0.75f, 0.05f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt, FixtureTrait::ColorRGB } }, true },
-    };
+    preview_probe_histories.clear();
+    preview_probes.clear();
+    for (FixtureProbe fixture : substrate::make_default_preview_probes(next_preview_probe_id)) {
+        preview_probes.push_back(PreviewProbe{std::move(fixture), true});
+    }
     selected_preview_probe_id = preview_probes.empty()
         ? std::nullopt
         : std::optional<uint64_t>{preview_probes.front().fixture.id};

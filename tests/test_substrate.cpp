@@ -62,6 +62,54 @@ void register_tick_counter() {
 
 #define PASS(msg) std::cout << "[PASS] " msg "\n"
 
+struct DriverOutputs {
+    float dimmer = 0.0f;
+    float tilt = 0.0f;
+    Vec3 color{0.0f, 0.0f, 0.0f};
+};
+
+const FixtureProbe* find_fixture_probe(const std::vector<FixtureProbe>& probes, std::string_view name) {
+    for (const auto& probe : probes) {
+        if (probe.name == name) {
+            return &probe;
+        }
+    }
+    return nullptr;
+}
+
+DriverOutputs evaluate_driver_outputs_at_probe(const Graph& source_graph,
+                                               NodeId driver_node_id,
+                                               Vec3 position,
+                                               int steps,
+                                               float dt) {
+    Graph graph = source_graph;
+    GraphBuildError error;
+    const Vec3 previous_position = current_builtin_probe_position();
+    set_builtin_probe_position(position);
+    const bool init_ok = graph.init_pass(&error);
+    assert(init_ok);
+    (void)init_ok;
+    for (int i = 0; i < steps; ++i) {
+        set_builtin_probe_position(position);
+        const bool tick_ok = graph.tick(dt, &error);
+        assert(tick_ok);
+        (void)tick_ok;
+    }
+
+    const Node* driver = graph.find_node(driver_node_id);
+    assert(driver != nullptr);
+    DriverOutputs outputs;
+    outputs.dimmer = std::get<Scalar>(driver->outputs[0].current);
+    outputs.tilt = std::get<Scalar>(driver->outputs[1].current);
+    outputs.color = std::get<Vec3>(driver->outputs[2].current);
+    set_builtin_probe_position(previous_position);
+    return outputs;
+}
+
+float color_distance(Vec3 a, Vec3 b) {
+    return std::abs(a[0] - b[0]) + std::abs(a[1] - b[1]) + std::abs(a[2] - b[2]);
+}
+
 int test_register_and_find() {
     register_builtin_node_types();
 
@@ -711,6 +759,49 @@ int test_spatial_fixture_driver_exposes_coupled_outputs() {
     return 0;
 }
 
+int test_seeded_default_spatial_patch_drives_mirrored_bar_rig() {
+    Graph graph;
+    NodeId next_id = 1;
+    ConnectionId next_connection_id = 1;
+    DefaultSpatialPatchIds ids;
+    CHECK(seed_default_spatial_patch(graph, next_id, next_connection_id, &ids));
+    CHECK(ids.spatial_fixture_driver_node_id != 0);
+    CHECK(ids.preview_node_id == ids.spatial_fixture_driver_node_id);
+    CHECK(ids.preview_output_socket_index == 2);
+
+    FixtureId next_fixture_id = 1;
+    const std::vector<FixtureProbe> probes = make_default_preview_probes(next_fixture_id);
+    CHECK(probes.size() == 10);
+
+    const FixtureProbe* left_1 = find_fixture_probe(probes, "Bar L1");
+    const FixtureProbe* right_1 = find_fixture_probe(probes, "Bar R1");
+    const FixtureProbe* left_5 = find_fixture_probe(probes, "Bar L5");
+    CHECK(left_1 != nullptr);
+    CHECK(right_1 != nullptr);
+    CHECK(left_5 != nullptr);
+
+    const DriverOutputs left_5_initial = evaluate_driver_outputs_at_probe(
+        graph, ids.spatial_fixture_driver_node_id, left_5->position, 0, 1.0f / 60.0f);
+    const DriverOutputs left_1_now = evaluate_driver_outputs_at_probe(
+        graph, ids.spatial_fixture_driver_node_id, left_1->position, 18, 1.0f / 60.0f);
+    const DriverOutputs right_1_now = evaluate_driver_outputs_at_probe(
+        graph, ids.spatial_fixture_driver_node_id, right_1->position, 18, 1.0f / 60.0f);
+    const DriverOutputs left_5_now = evaluate_driver_outputs_at_probe(
+        graph, ids.spatial_fixture_driver_node_id, left_5->position, 18, 1.0f / 60.0f);
+
+    CHECK(std::abs(left_1_now.dimmer - right_1_now.dimmer) < 0.0001f);
+    CHECK(std::abs(left_1_now.tilt - right_1_now.tilt) < 0.0001f);
+    CHECK(color_distance(left_1_now.color, right_1_now.color) < 0.0001f);
+
+    CHECK(std::abs(left_1_now.tilt - left_5_now.tilt) > 0.01f ||
+          color_distance(left_1_now.color, left_5_now.color) > 0.05f);
+    CHECK(std::abs(left_5_initial.tilt - left_5_now.tilt) > 0.01f ||
+          color_distance(left_5_initial.color, left_5_now.color) > 0.05f);
+
+    PASS("Seeded default spatial patch drives mirrored but time-varying bar samples");
+    return 0;
+}
+
 // ----------------------------------------------------------------------------
 
 int main() {
@@ -746,6 +837,7 @@ int main() {
     rc |= test_output_dimmer_clamps_scalar_output();
     rc |= test_output_tilt_clamps_scalar_output();
     rc |= test_spatial_fixture_driver_exposes_coupled_outputs();
+    rc |= test_seeded_default_spatial_patch_drives_mirrored_bar_rig();
 
     if (rc == 0) {
         std::cout << "\nAll substrate tests passed.\n";

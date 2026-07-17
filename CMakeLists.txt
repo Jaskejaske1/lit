@@ -98,6 +98,7 @@ add_library(substrate STATIC
     src/substrate/node.h
     src/substrate/graph.h
     src/substrate/builtins.h
+    src/substrate/demo_patch.h
     src/substrate/substrate.h
     src/substrate/substrate.cpp
 )

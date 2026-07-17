@@ -12,3 +12,4 @@
 #include "node.h"
 #include "graph.h"
 #include "builtins.h"
+#include "demo_patch.h"

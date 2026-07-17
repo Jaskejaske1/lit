@@ -57,6 +57,7 @@ Current prototype baseline:
 - `test_substrate` now also covers the minimal fixture/probe helpers that back the Builder-side sample-point model.
 - `test_substrate` now also covers `OutputDimmer` and `OutputTilt`, the first explicit graph-side scalar output primitives for sampled fixtures.
 - `test_substrate` now also covers `MixVec3` and `SpatialFixtureDriver`, so the prototype now has a minimal Vec3 color-mixing path and a coupled fixture bridge for dimmer, tilt, and color.
+- The seeded default rig/effect is now also factored into shared substrate-side demo helpers, and `test_substrate` exercises that baseline directly so the mirrored bar sweep stops being a `lit_view`-only behavior with no regression coverage.
 - `lit_view` opens a debug console for the current substrate types, including a live `Phase` node whose output advances over time.
 - `lit_view` also lets you tweak disconnected input sockets and node state live, so the current prototype is a real substrate workbench rather than a read-only inspector.
 - The node inspector now also exposes node renaming, free-text per-node comments, and bypass state directly in the header, so graph identity, intent, and muted branches are easier to track as the prototype grows.

@@ -70,6 +70,7 @@ Phase 1 - Real substrate skeleton
   - Those probes are now first-class named sample points with editable world-space positions, and a selected probe now drives the inspector-side live sample position instead of an invisible center fallback.
   - The workbench now also materializes those named points into concrete sampled outputs with IDs, positions, and scalar values, and those values now come from exact per-point persistent graph evaluation instead of nearest-cell heatmap approximation.
   - Those Builder-side sample points now sit on top of a minimal substrate-side `FixtureProbe` + `FixtureTrait` model, with helper coverage in `test_substrate`.
+  - That same seeded default rig/effect now lives in shared substrate-side demo helpers, and `test_substrate` directly proves that the baseline bar sweep is mirrored left/right, spatially differentiated across the rig, and time-varying instead of treating it as a `lit_view`-only behavior.
   - The current built-in output set now includes `OutputDimmer`, `OutputTilt`, `MixVec3`, and a minimal `SpatialFixtureDriver`, with helper coverage in `test_substrate`.
   - The default sweep graph now terminates in `SpatialFixtureDriver`, so one coupled graph-side fixture bridge publishes dimmer, tilt, and color for the sampled-point surface.
   - The default bar probes now advertise `Dimmer`, `Tilt`, and `ColorRGB`.
