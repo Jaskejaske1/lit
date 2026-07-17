@@ -152,6 +152,8 @@ struct PreviewProbeSample {
     uint64_t probe_id = 0;
     Vec3 world_position{0.0f, 0.0f, 0.0f};
     float scalar_value = 0.0f;
+    std::optional<float> dimmer_value;
+    std::optional<float> tilt_value;
 };
 
 struct PreviewProbeRuntime {
@@ -175,6 +177,7 @@ struct App {
     int          destination_node_selection = 0;
     int          destination_input_selection = 0;
     NodeId       preview_node_id = 0;
+    NodeId       spatial_fixture_driver_node_id = 0;
     int          preview_output_socket_index = 0;
     float        preview_x_min = 0.0f;
     float        preview_x_max = 1.0f;
@@ -218,6 +221,7 @@ struct App {
     bool refresh_preview_samples();
     void refresh_preview_probe_samples();
     std::optional<float> extract_preview_output(const Graph& source_graph) const;
+    std::optional<float> extract_node_output_scalar(const Graph& source_graph, NodeId node_id, std::size_t output_index) const;
 
     bool init();
     void run();
@@ -430,6 +434,14 @@ void App::delete_node(NodeId id) {
                        [id](const Node& node) { return node.id == id; }),
         graph.nodes.end());
 
+    if (preview_node_id == id) {
+        preview_node_id = 0;
+        preview_output_socket_index = 0;
+    }
+    if (spatial_fixture_driver_node_id == id) {
+        spatial_fixture_driver_node_id = 0;
+    }
+
     rebuild_graph(graph, &last_graph_error);
     mark_preview_dirty();
 }
@@ -470,13 +482,12 @@ void App::seed_default_spatial_patch() {
     const NodeId background_id = spawn_node_named("Constant", "Base Level");
     const NodeId peak_id = spawn_node_named("Constant", "Peak Level");
     const NodeId mix_id = spawn_node_named("Mix", "Dimmer Mix");
-    const NodeId output_dimmer_id = spawn_node_named("OutputDimmer", "Dimmer Output");
-    const NodeId output_tilt_id = spawn_node_named("OutputTilt", "Tilt Output");
+    const NodeId fixture_driver_id = spawn_node_named("SpatialFixtureDriver", "Fixture Driver");
 
     if (!probe_x_id || !probe_y_id || !mirror_x_id || !frequency_y_id ||
         !multiply_y_id || !spatial_add_id || !phase_id || !time_offset_id ||
         !sine_id || !decay_id || !background_id || !peak_id || !mix_id ||
-        !output_dimmer_id || !output_tilt_id) {
+        !fixture_driver_id) {
         return;
     }
 
@@ -510,10 +521,11 @@ void App::seed_default_spatial_patch() {
     if (!try_add_connection(background_id, 0, mix_id, 0)) return;
     if (!try_add_connection(peak_id, 0, mix_id, 1)) return;
     if (!try_add_connection(decay_id, 0, mix_id, 2)) return;
-    if (!try_add_connection(mix_id, 0, output_dimmer_id, 0)) return;
-    if (!try_add_connection(sine_id, 0, output_tilt_id, 0)) return;
+    if (!try_add_connection(mix_id, 0, fixture_driver_id, 0)) return;
+    if (!try_add_connection(sine_id, 0, fixture_driver_id, 1)) return;
 
-    preview_node_id = output_dimmer_id;
+    spatial_fixture_driver_node_id = fixture_driver_id;
+    preview_node_id = fixture_driver_id;
     preview_output_socket_index = 0;
 }
 
@@ -522,6 +534,7 @@ bool App::reset_default_patch() {
     next_id = 1;
     next_connection_id = 1;
     preview_node_id = 0;
+    spatial_fixture_driver_node_id = 0;
     preview_output_socket_index = 0;
     source_node_selection = 0;
     source_output_selection = 0;
@@ -676,20 +689,26 @@ std::size_t App::enabled_preview_probe_count() const {
 }
 
 std::optional<float> App::extract_preview_output(const Graph& source_graph) const {
-    if (preview_node_id == 0) {
+    return extract_node_output_scalar(source_graph, preview_node_id,
+                                      (std::size_t)preview_output_socket_index);
+}
+
+std::optional<float> App::extract_node_output_scalar(const Graph& source_graph, NodeId node_id,
+                                                     std::size_t output_index) const {
+    if (node_id == 0) {
         return std::nullopt;
     }
 
-    const Node* source_node = source_graph.find_node(preview_node_id);
-    if (!source_node || preview_output_socket_index >= (int)source_node->outputs.size()) {
+    const Node* source_node = source_graph.find_node(node_id);
+    if (!source_node || output_index >= source_node->outputs.size()) {
         return std::nullopt;
     }
 
-    if (source_node->outputs[(std::size_t)preview_output_socket_index].type != ValueType::Scalar) {
+    if (source_node->outputs[output_index].type != ValueType::Scalar) {
         return std::nullopt;
     }
 
-    return std::get<Scalar>(source_node->outputs[(std::size_t)preview_output_socket_index].current);
+    return std::get<Scalar>(source_node->outputs[output_index].current);
 }
 
 bool App::rebuild_preview_graphs() {
@@ -770,10 +789,16 @@ void App::refresh_preview_probe_samples() {
         }
 
         const std::optional<float> exact_sample = extract_preview_output(runtime.graph);
+        const std::optional<float> dimmer_value =
+            extract_node_output_scalar(runtime.graph, spatial_fixture_driver_node_id, 0);
+        const std::optional<float> tilt_value =
+            extract_node_output_scalar(runtime.graph, spatial_fixture_driver_node_id, 1);
         preview_probe_samples.push_back(PreviewProbeSample{
             probe->fixture.id,
             probe->fixture.position,
             std::clamp(exact_sample.value_or(0.0f), 0.0f, 1.0f),
+            dimmer_value ? std::optional<float>{std::clamp(*dimmer_value, 0.0f, 1.0f)} : std::nullopt,
+            tilt_value ? std::optional<float>{std::clamp(*tilt_value, 0.0f, 1.0f)} : std::nullopt,
         });
     }
 }
@@ -1309,6 +1334,19 @@ void App::draw_field_preview_panel() {
                 const std::string sample_label = current_preview_output_label();
                 ImGui::ProgressBar(sample.scalar_value, ImVec2(-1.0f, 0.0f), sample_label.c_str());
                 ImGui::Text("%s sample: %.3f", sample_label.c_str(), sample.scalar_value);
+                if (sample.dimmer_value.has_value() || sample.tilt_value.has_value()) {
+                    char dimmer_buffer[16] = "--";
+                    char tilt_buffer[16] = "--";
+                    if (sample.dimmer_value.has_value()) {
+                        std::snprintf(dimmer_buffer, sizeof(dimmer_buffer), "%.3f", *sample.dimmer_value);
+                    }
+                    if (sample.tilt_value.has_value()) {
+                        std::snprintf(tilt_buffer, sizeof(tilt_buffer), "%.3f", *sample.tilt_value);
+                    }
+                    ImGui::Text("Fixture driver: dimmer %s  tilt %s",
+                                dimmer_buffer,
+                                tilt_buffer);
+                }
                 ImGui::Separator();
                 ImGui::PopID();
             }
@@ -1353,6 +1391,8 @@ void App::draw_debug_panel() {
     if (ImGui::Button("Output Dimmer")) spawn_node("OutputDimmer");
     ImGui::SameLine();
     if (ImGui::Button("Output Tilt"))   spawn_node("OutputTilt");
+    ImGui::SameLine();
+    if (ImGui::Button("Fixture Driver")) spawn_node("SpatialFixtureDriver");
     ImGui::SameLine();
     if (ImGui::Button("Sine"))          spawn_node("Sine");
     ImGui::SameLine();

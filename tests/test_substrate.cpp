@@ -184,7 +184,7 @@ int test_fixture_probe_trait_helpers() {
 
 int test_all_node_types() {
     const auto& all = all_node_types();
-    CHECK(all.size() >= 14);
+    CHECK(all.size() >= 15);
     CHECK(all.count("Constant") == 1);
     CHECK(all.count("ConstantVec3") == 1);
     CHECK(all.count("Mix") == 1);
@@ -193,6 +193,7 @@ int test_all_node_types() {
     CHECK(all.count("Decay") == 1);
     CHECK(all.count("OutputDimmer") == 1);
     CHECK(all.count("OutputTilt") == 1);
+    CHECK(all.count("SpatialFixtureDriver") == 1);
     CHECK(all.count("Multiply") == 1);
     CHECK(all.count("Sine") == 1);
     CHECK(all.count("ProbeX") == 1);
@@ -527,6 +528,21 @@ int test_output_tilt_clamps_scalar_output() {
     return 0;
 }
 
+int test_spatial_fixture_driver_exposes_coupled_outputs() {
+    const NodeType* driver = find_node_type("SpatialFixtureDriver");
+    CHECK(driver != nullptr);
+
+    Node n = make_node(*driver, 71, "SpatialFixtureDriver");
+    n.inputs[0].current = SocketValue{Scalar{0.75f}};
+    n.inputs[1].current = SocketValue{Scalar{1.4f}};
+    n.type->evaluate(n, 0.0f, 0.0f, true);
+    CHECK(std::get<Scalar>(n.outputs[0].current) == 0.75f);
+    CHECK(std::get<Scalar>(n.outputs[1].current) == 1.0f);
+
+    PASS("SpatialFixtureDriver exposes clamped dimmer and tilt outputs");
+    return 0;
+}
+
 // ----------------------------------------------------------------------------
 
 int main() {
@@ -554,6 +570,7 @@ int main() {
     rc |= test_decay_node_holds_peaks_and_decays_over_time();
     rc |= test_output_dimmer_clamps_scalar_output();
     rc |= test_output_tilt_clamps_scalar_output();
+    rc |= test_spatial_fixture_driver_exposes_coupled_outputs();
 
     if (rc == 0) {
         std::cout << "\nAll substrate tests passed.\n";
