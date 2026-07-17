@@ -142,6 +142,19 @@ std::string format_fixture_traits(const std::vector<FixtureTrait>& traits) {
     return result;
 }
 
+std::optional<std::string> mirrored_probe_name(std::string_view name) {
+    constexpr std::string_view left_prefix = "Bar L";
+    constexpr std::string_view right_prefix = "Bar R";
+
+    if (name.substr(0, left_prefix.size()) == left_prefix) {
+        return std::string(right_prefix) + std::string(name.substr(left_prefix.size()));
+    }
+    if (name.substr(0, right_prefix.size()) == right_prefix) {
+        return std::string(left_prefix) + std::string(name.substr(right_prefix.size()));
+    }
+    return std::nullopt;
+}
+
 // ============================================================================
 // Application
 // ============================================================================
@@ -198,6 +211,7 @@ struct App {
     float        preview_y_max = 1.0f;
     float        preview_z = 0.0f;
     bool         show_preview_probes = true;
+    bool         lock_mirrored_preview_pairs = true;
     uint64_t     next_preview_probe_id = 1;
     std::optional<uint64_t> selected_preview_probe_id;
     std::optional<uint64_t> dragged_preview_probe_id;
@@ -225,11 +239,15 @@ struct App {
     Vec3 preview_world_position_from_normalized(Vec2 normalized, float z = 0.0f) const;
     Vec2 preview_normalized_from_world(Vec3 position) const;
     bool fit_preview_domain_to_probes(float padding_ratio = 0.08f);
+    float preview_probe_mirror_center_x() const;
     PreviewOutputSample preview_sample_from_world(Vec3 position) const;
     PreviewProbe* find_preview_probe(uint64_t id);
     const PreviewProbe* find_preview_probe(uint64_t id) const;
+    PreviewProbe* find_preview_probe_by_name(std::string_view name);
+    const PreviewProbe* find_preview_probe_by_name(std::string_view name) const;
     const PreviewProbeSample* find_preview_probe_sample(uint64_t id) const;
     const PreviewProbe* selected_preview_probe() const;
+    bool sync_mirrored_preview_probe(const PreviewProbe& source_probe, bool copy_traits);
     std::string current_preview_output_label() const;
     std::optional<ValueType> current_preview_output_type() const;
     void ensure_preview_probe_selection();
@@ -738,6 +756,31 @@ bool App::fit_preview_domain_to_probes(float padding_ratio) {
     return true;
 }
 
+float App::preview_probe_mirror_center_x() const {
+    const PreviewProbe* first_enabled_probe = nullptr;
+    for (const auto& probe : preview_probes) {
+        if (probe.enabled) {
+            first_enabled_probe = &probe;
+            break;
+        }
+    }
+
+    if (!first_enabled_probe) {
+        return 0.5f;
+    }
+
+    float min_x = first_enabled_probe->fixture.position[0];
+    float max_x = first_enabled_probe->fixture.position[0];
+    for (const auto& probe : preview_probes) {
+        if (!probe.enabled) {
+            continue;
+        }
+        min_x = std::min(min_x, probe.fixture.position[0]);
+        max_x = std::max(max_x, probe.fixture.position[0]);
+    }
+    return (min_x + max_x) * 0.5f;
+}
+
 PreviewOutputSample App::preview_sample_from_world(Vec3 position) const {
     if (preview_samples.empty()) {
         return {};
@@ -769,6 +812,24 @@ const PreviewProbe* App::find_preview_probe(uint64_t id) const {
     return nullptr;
 }
 
+PreviewProbe* App::find_preview_probe_by_name(std::string_view name) {
+    for (auto& probe : preview_probes) {
+        if (probe.fixture.name == name) {
+            return &probe;
+        }
+    }
+    return nullptr;
+}
+
+const PreviewProbe* App::find_preview_probe_by_name(std::string_view name) const {
+    for (const auto& probe : preview_probes) {
+        if (probe.fixture.name == name) {
+            return &probe;
+        }
+    }
+    return nullptr;
+}
+
 const PreviewProbeSample* App::find_preview_probe_sample(uint64_t id) const {
     for (const auto& sample : preview_probe_samples) {
         if (sample.probe_id == id) {
@@ -787,6 +848,42 @@ const PreviewProbe* App::selected_preview_probe() const {
         return nullptr;
     }
     return probe;
+}
+
+bool App::sync_mirrored_preview_probe(const PreviewProbe& source_probe, bool copy_traits) {
+    const std::optional<std::string> mirrored_name = mirrored_probe_name(source_probe.fixture.name);
+    if (!mirrored_name.has_value()) {
+        return false;
+    }
+
+    PreviewProbe* mirrored_probe = find_preview_probe_by_name(*mirrored_name);
+    if (!mirrored_probe || mirrored_probe->fixture.id == source_probe.fixture.id) {
+        return false;
+    }
+
+    const float center_x = preview_probe_mirror_center_x();
+    const Vec3 next_position{
+        center_x + (center_x - source_probe.fixture.position[0]),
+        source_probe.fixture.position[1],
+        source_probe.fixture.position[2],
+    };
+
+    bool changed = false;
+    const Vec3 previous_position = mirrored_probe->fixture.position;
+    const float dx = next_position[0] - previous_position[0];
+    const float dy = next_position[1] - previous_position[1];
+    const float dz = next_position[2] - previous_position[2];
+    if ((dx * dx + dy * dy + dz * dz) > 0.00000025f) {
+        mirrored_probe->fixture.position = next_position;
+        changed = true;
+    }
+
+    if (copy_traits && mirrored_probe->fixture.traits != source_probe.fixture.traits) {
+        mirrored_probe->fixture.traits = source_probe.fixture.traits;
+        changed = true;
+    }
+
+    return changed;
 }
 
 std::string App::current_preview_output_label() const {
@@ -1640,6 +1737,9 @@ void App::draw_field_preview_panel() {
             const float dy = next_position[1] - previous_position[1];
             if ((dx * dx + dy * dy) > 0.00000025f) {
                 dragged_probe->fixture.position = next_position;
+                if (lock_mirrored_preview_pairs) {
+                    sync_mirrored_preview_probe(*dragged_probe, false);
+                }
                 mark_preview_dirty();
             }
         } else {
@@ -1739,10 +1839,15 @@ void App::draw_field_preview_panel() {
             selected_preview_probe_id = preview_probes.back().fixture.id;
             mark_preview_dirty();
         }
+        ImGui::SameLine();
+        ImGui::Checkbox("Lock mirrored pairs", &lock_mirrored_preview_pairs);
 
         std::optional<uint64_t> probe_to_delete;
         for (auto& probe : preview_probes) {
             ImGui::PushID((int)probe.fixture.id);
+            const std::optional<std::string> mirrored_name = mirrored_probe_name(probe.fixture.name);
+            const bool has_mirrored_pair = mirrored_name.has_value() &&
+                find_preview_probe_by_name(*mirrored_name) != nullptr;
 
             const bool selected = selected_preview_probe_id.has_value() && *selected_preview_probe_id == probe.fixture.id;
             if (ImGui::Selectable(probe.fixture.name.c_str(), selected)) {
@@ -1762,6 +1867,14 @@ void App::draw_field_preview_panel() {
             if (ImGui::InputText("Name", name_buffer, sizeof(name_buffer))) {
                 probe.fixture.name = name_buffer;
             }
+            if (has_mirrored_pair) {
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Sync Pair")) {
+                    if (sync_mirrored_preview_probe(probe, true)) {
+                        mark_preview_dirty();
+                    }
+                }
+            }
 
             float world_xyz[3] = {
                 probe.fixture.position[0],
@@ -1770,27 +1883,40 @@ void App::draw_field_preview_panel() {
             };
             if (ImGui::DragFloat3("World XYZ", world_xyz, 0.01f)) {
                 probe.fixture.position = Vec3{world_xyz[0], world_xyz[1], world_xyz[2]};
+                if (lock_mirrored_preview_pairs) {
+                    sync_mirrored_preview_probe(probe, false);
+                }
                 mark_preview_dirty();
             }
 
             bool dimmer = fixture_has_trait(probe.fixture, FixtureTrait::Dimmer);
+            bool traits_changed = false;
             if (ImGui::Checkbox("Dimmer Trait", &dimmer)) {
                 fixture_set_trait(probe.fixture, FixtureTrait::Dimmer, dimmer);
+                traits_changed = true;
             }
             ImGui::SameLine();
             bool pan = fixture_has_trait(probe.fixture, FixtureTrait::Pan);
             if (ImGui::Checkbox("Pan Trait", &pan)) {
                 fixture_set_trait(probe.fixture, FixtureTrait::Pan, pan);
+                traits_changed = true;
             }
             ImGui::SameLine();
             bool tilt = fixture_has_trait(probe.fixture, FixtureTrait::Tilt);
             if (ImGui::Checkbox("Tilt Trait", &tilt)) {
                 fixture_set_trait(probe.fixture, FixtureTrait::Tilt, tilt);
+                traits_changed = true;
             }
             ImGui::SameLine();
             bool color_rgb = fixture_has_trait(probe.fixture, FixtureTrait::ColorRGB);
             if (ImGui::Checkbox("ColorRGB Trait", &color_rgb)) {
                 fixture_set_trait(probe.fixture, FixtureTrait::ColorRGB, color_rgb);
+                traits_changed = true;
+            }
+            if (traits_changed && lock_mirrored_preview_pairs) {
+                if (sync_mirrored_preview_probe(probe, true)) {
+                    mark_preview_dirty();
+                }
             }
 
             const PreviewOutputSample sample = preview_sample_from_world(probe.fixture.position);
