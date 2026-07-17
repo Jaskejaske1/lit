@@ -194,6 +194,7 @@ struct App {
     float preview_sample_from_normalized(Vec2 normalized) const;
     PreviewProbe* find_preview_probe(uint64_t id);
     const PreviewProbe* find_preview_probe(uint64_t id) const;
+    const PreviewProbeSample* find_preview_probe_sample(uint64_t id) const;
     const PreviewProbe* selected_preview_probe() const;
     void ensure_preview_probe_selection();
     std::size_t enabled_preview_probe_count() const;
@@ -562,6 +563,15 @@ const PreviewProbe* App::find_preview_probe(uint64_t id) const {
     for (const auto& probe : preview_probes) {
         if (probe.id == id) {
             return &probe;
+        }
+    }
+    return nullptr;
+}
+
+const PreviewProbeSample* App::find_preview_probe_sample(uint64_t id) const {
+    for (const auto& sample : preview_probe_samples) {
+        if (sample.probe_id == id) {
+            return &sample;
         }
     }
     return nullptr;
@@ -1067,7 +1077,8 @@ void App::draw_field_preview_panel() {
                 continue;
             }
             const Vec2 normalized = probe.normalized_position;
-            const float sample = std::clamp(preview_sample_from_normalized(normalized), 0.0f, 1.0f);
+            const PreviewProbeSample* exact_sample = find_preview_probe_sample(probe.id);
+            const float sample = std::clamp(exact_sample ? exact_sample->scalar_value : 0.0f, 0.0f, 1.0f);
             const ImVec2 center{
                 origin.x + normalized[0] * ((preview_grid_width - 1) * (cell_size + cell_padding)),
                 origin.y + normalized[1] * ((preview_grid_height - 1) * (cell_size + cell_padding)),
