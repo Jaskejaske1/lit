@@ -62,6 +62,7 @@ Phase 1 - Real substrate skeleton
   - Registry-backed nodes, graph bake/topo order, init pass, and live ticking are working on NixOS.
   - The current built-in node set now includes `Constant`, `ConstantVec3`, `Phase`, `Add`, `Multiply`, `Sine`, `Mix`, `Clamp`, `TimeOffset`, `SpatialMirror`, `Decay`, `ProbeX`, and `ProbeY`.
   - `lit_view` can edit disconnected inputs/state, create connections, and preview scalar or `Vec3` outputs over a sampled 2D `X,Y` grid with explicit user-controlled bounds.
+  - The node inspector now also exposes per-node comments and marks bypassed nodes directly in the node header, which brings the current workbench closer to the data-model/ideas docs instead of hiding graph intent in code only.
   - The current connection editor now filters out wrong-type sockets, already-occupied inputs, and self-connections up front, so the Builder workbench avoids many guaranteed-invalid wiring attempts before the graph validator even runs.
   - That Connections panel now also shows the selected source value and the live transported source/input values for every existing connection, which is the first concrete Builder-side slice of the docs' "wires carry actual values" goal.
   - The field preview now keeps one persistent graph state per sampled probe, which makes temporal nodes meaningful across space instead of collapsing them into one shared history.

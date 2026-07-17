@@ -895,10 +895,11 @@ void App::refresh_preview_probe_samples() {
 }
 
 void App::draw_node(Node& n) {
-    if (!ImGui::TreeNode(&n, "Node #%llu  '%s'  [%s]",
+    if (!ImGui::TreeNode(&n, "Node #%llu  '%s'  [%s]%s",
                          (unsigned long long)n.id,
                          n.name.c_str(),
-                         n.type->name.c_str())) {
+                         n.type->name.c_str(),
+                         n.bypass ? " [bypassed]" : "")) {
         return;
     }
 
@@ -907,6 +908,13 @@ void App::draw_node(Node& n) {
     ImGui::SameLine();
     if (ImGui::SmallButton("Delete Node")) {
         pending_delete_node_id = n.id;
+    }
+
+    std::vector<char> comments_buffer(std::max<std::size_t>(n.comments.size() + 256, 1024), '\0');
+    std::snprintf(comments_buffer.data(), comments_buffer.size(), "%s", n.comments.c_str());
+    if (ImGui::InputTextMultiline("Comments", comments_buffer.data(), comments_buffer.size(),
+                                  ImVec2(-1.0f, ImGui::GetTextLineHeight() * 4.0f))) {
+        n.comments = comments_buffer.data();
     }
 
     if (!n.inputs.empty()) {
