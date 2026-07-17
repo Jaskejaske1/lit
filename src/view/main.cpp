@@ -148,13 +148,19 @@ struct PreviewProbe {
     bool enabled = true;
 };
 
+struct PreviewOutputSample {
+    std::optional<float> scalar_value;
+    std::optional<Vec3> color_value;
+};
+
 struct PreviewProbeSample {
     uint64_t probe_id = 0;
     Vec3 world_position{0.0f, 0.0f, 0.0f};
-    float scalar_value = 0.0f;
+    std::optional<float> preview_scalar_value;
+    std::optional<Vec3> preview_color_value;
     std::optional<float> dimmer_value;
     std::optional<float> tilt_value;
-    std::optional<Vec3> color_value;
+    std::optional<Vec3> driver_color_value;
 };
 
 struct PreviewProbeRuntime {
@@ -190,7 +196,7 @@ struct App {
     bool         preview_graphs_dirty = true;
     std::vector<Graph> preview_graphs;
     std::vector<PreviewProbeRuntime> preview_probe_graphs;
-    std::vector<float> preview_samples;
+    std::vector<PreviewOutputSample> preview_samples;
     std::vector<PreviewProbe> preview_probes;
     std::vector<PreviewProbeSample> preview_probe_samples;
     std::string  last_graph_error;
@@ -209,19 +215,20 @@ struct App {
     Vec2 preview_position_for_cell(int x, int y) const;
     Vec3 preview_world_position_from_normalized(Vec2 normalized, float z = 0.0f) const;
     Vec2 preview_normalized_from_world(Vec3 position) const;
-    float preview_sample_from_world(Vec3 position) const;
+    PreviewOutputSample preview_sample_from_world(Vec3 position) const;
     PreviewProbe* find_preview_probe(uint64_t id);
     const PreviewProbe* find_preview_probe(uint64_t id) const;
     const PreviewProbeSample* find_preview_probe_sample(uint64_t id) const;
     const PreviewProbe* selected_preview_probe() const;
     std::string current_preview_output_label() const;
+    std::optional<ValueType> current_preview_output_type() const;
     void ensure_preview_probe_selection();
     std::size_t enabled_preview_probe_count() const;
     bool rebuild_preview_graphs();
     bool rebuild_preview_probe_graphs();
     bool refresh_preview_samples();
     void refresh_preview_probe_samples();
-    std::optional<float> extract_preview_output(const Graph& source_graph) const;
+    PreviewOutputSample extract_preview_output(const Graph& source_graph) const;
     std::optional<float> extract_node_output_scalar(const Graph& source_graph, NodeId node_id, std::size_t output_index) const;
     std::optional<Vec3> extract_node_output_vec3(const Graph& source_graph, NodeId node_id, std::size_t output_index) const;
 
@@ -541,7 +548,7 @@ void App::seed_default_spatial_patch() {
 
     spatial_fixture_driver_node_id = fixture_driver_id;
     preview_node_id = fixture_driver_id;
-    preview_output_socket_index = 0;
+    preview_output_socket_index = 2;
 }
 
 bool App::reset_default_patch() {
@@ -620,9 +627,9 @@ Vec2 App::preview_normalized_from_world(Vec3 position) const {
     };
 }
 
-float App::preview_sample_from_world(Vec3 position) const {
+PreviewOutputSample App::preview_sample_from_world(Vec3 position) const {
     if (preview_samples.empty()) {
-        return 0.0f;
+        return {};
     }
 
     const Vec2 normalized = preview_normalized_from_world(position);
@@ -680,6 +687,15 @@ std::string App::current_preview_output_label() const {
     return preview_node->outputs[(std::size_t)preview_output_socket_index].name;
 }
 
+std::optional<ValueType> App::current_preview_output_type() const {
+    const Node* preview_node = graph.find_node(preview_node_id);
+    if (!preview_node || preview_output_socket_index < 0 ||
+        preview_output_socket_index >= (int)preview_node->outputs.size()) {
+        return std::nullopt;
+    }
+    return preview_node->outputs[(std::size_t)preview_output_socket_index].type;
+}
+
 void App::ensure_preview_probe_selection() {
     if (selected_preview_probe()) {
         return;
@@ -703,9 +719,28 @@ std::size_t App::enabled_preview_probe_count() const {
     return count;
 }
 
-std::optional<float> App::extract_preview_output(const Graph& source_graph) const {
-    return extract_node_output_scalar(source_graph, preview_node_id,
-                                      (std::size_t)preview_output_socket_index);
+PreviewOutputSample App::extract_preview_output(const Graph& source_graph) const {
+    const auto preview_type = current_preview_output_type();
+    if (!preview_type.has_value()) {
+        return {};
+    }
+
+    switch (*preview_type) {
+        case ValueType::Scalar:
+            return PreviewOutputSample{
+                extract_node_output_scalar(source_graph, preview_node_id,
+                                           (std::size_t)preview_output_socket_index),
+                std::nullopt,
+            };
+        case ValueType::Vec3:
+            return PreviewOutputSample{
+                std::nullopt,
+                extract_node_output_vec3(source_graph, preview_node_id,
+                                         (std::size_t)preview_output_socket_index),
+            };
+        default:
+            return {};
+    }
 }
 
 std::optional<float> App::extract_node_output_scalar(const Graph& source_graph, NodeId node_id,
@@ -746,7 +781,7 @@ std::optional<Vec3> App::extract_node_output_vec3(const Graph& source_graph, Nod
 
 bool App::rebuild_preview_graphs() {
     preview_graphs.clear();
-    preview_samples.assign((std::size_t)(preview_grid_width * preview_grid_height), 0.0f);
+    preview_samples.assign((std::size_t)(preview_grid_width * preview_grid_height), {});
     preview_graphs.reserve((std::size_t)(preview_grid_width * preview_grid_height));
 
     const Vec2 previous_probe_position = current_builtin_probe_position();
@@ -804,8 +839,7 @@ bool App::refresh_preview_samples() {
     }
 
     for (std::size_t i = 0; i < preview_graphs.size(); ++i) {
-        const std::optional<float> sample = extract_preview_output(preview_graphs[i]);
-        preview_samples[i] = sample.value_or(0.0f);
+        preview_samples[i] = extract_preview_output(preview_graphs[i]);
     }
 
     return true;
@@ -821,7 +855,7 @@ void App::refresh_preview_probe_samples() {
             continue;
         }
 
-        const std::optional<float> exact_sample = extract_preview_output(runtime.graph);
+        const PreviewOutputSample exact_sample = extract_preview_output(runtime.graph);
         const std::optional<float> dimmer_value = fixture_has_trait(probe->fixture, FixtureTrait::Dimmer)
             ? extract_node_output_scalar(runtime.graph, spatial_fixture_driver_node_id, 0)
             : std::nullopt;
@@ -834,7 +868,16 @@ void App::refresh_preview_probe_samples() {
         preview_probe_samples.push_back(PreviewProbeSample{
             probe->fixture.id,
             probe->fixture.position,
-            std::clamp(exact_sample.value_or(0.0f), 0.0f, 1.0f),
+            exact_sample.scalar_value
+                ? std::optional<float>{std::clamp(*exact_sample.scalar_value, 0.0f, 1.0f)}
+                : std::nullopt,
+            exact_sample.color_value
+                ? std::optional<Vec3>{Vec3{
+                    std::clamp((*exact_sample.color_value)[0], 0.0f, 1.0f),
+                    std::clamp((*exact_sample.color_value)[1], 0.0f, 1.0f),
+                    std::clamp((*exact_sample.color_value)[2], 0.0f, 1.0f),
+                }}
+                : std::nullopt,
             dimmer_value ? std::optional<float>{std::clamp(*dimmer_value, 0.0f, 1.0f)} : std::nullopt,
             tilt_value ? std::optional<float>{std::clamp(*tilt_value, 0.0f, 1.0f)} : std::nullopt,
             color_value ? std::optional<Vec3>{Vec3{
@@ -1062,23 +1105,43 @@ void App::draw_field_preview_panel() {
 
     ensure_preview_probe_selection();
 
-    std::vector<const Node*> scalar_output_nodes;
+    auto preview_sample_intensity = [](const PreviewOutputSample& sample) -> float {
+        if (sample.scalar_value.has_value()) {
+            return std::clamp(*sample.scalar_value, 0.0f, 1.0f);
+        }
+        if (sample.color_value.has_value()) {
+            const Vec3 color = *sample.color_value;
+            return std::clamp((color[0] + color[1] + color[2]) / 3.0f, 0.0f, 1.0f);
+        }
+        return 0.0f;
+    };
+
+    auto preview_sample_color = [&](const PreviewOutputSample& sample) -> ImVec4 {
+        if (sample.color_value.has_value()) {
+            const Vec3 color = *sample.color_value;
+            return ImVec4(color[0], color[1], color[2], 1.0f);
+        }
+        const float value = preview_sample_intensity(sample);
+        return ImVec4(value, value * 0.8f, 0.15f + value * 0.85f, 1.0f);
+    };
+
+    std::vector<const Node*> preview_output_nodes;
     for (const auto& node : graph.nodes) {
         for (const auto& output : node.outputs) {
-            if (output.type == ValueType::Scalar) {
-                scalar_output_nodes.push_back(&node);
+            if (output.type == ValueType::Scalar || output.type == ValueType::Vec3) {
+                preview_output_nodes.push_back(&node);
                 break;
             }
         }
     }
 
-    if (scalar_output_nodes.empty()) {
-        ImGui::TextUnformatted("Need at least one node with a scalar output.");
+    if (preview_output_nodes.empty()) {
+        ImGui::TextUnformatted("Need at least one node with a scalar or Vec3 output.");
         return;
     }
 
     if (!graph.find_node(preview_node_id)) {
-        preview_node_id = scalar_output_nodes.front()->id;
+        preview_node_id = preview_output_nodes.front()->id;
         preview_output_socket_index = 0;
     }
 
@@ -1089,7 +1152,7 @@ void App::draw_field_preview_panel() {
     }
 
     if (ImGui::BeginCombo("Preview Node", preview_node->name.c_str())) {
-        for (const Node* node : scalar_output_nodes) {
+        for (const Node* node : preview_output_nodes) {
             const bool selected = node->id == preview_node_id;
             if (ImGui::Selectable(node->name.c_str(), selected)) {
                 preview_node_id = node->id;
@@ -1105,25 +1168,26 @@ void App::draw_field_preview_panel() {
         ImGui::EndCombo();
     }
 
-    std::vector<std::size_t> scalar_outputs;
+    std::vector<std::size_t> preview_outputs;
     for (std::size_t i = 0; i < preview_node->outputs.size(); ++i) {
-        if (preview_node->outputs[i].type == ValueType::Scalar) {
-            scalar_outputs.push_back(i);
+        if (preview_node->outputs[i].type == ValueType::Scalar ||
+            preview_node->outputs[i].type == ValueType::Vec3) {
+            preview_outputs.push_back(i);
         }
     }
 
-    if (scalar_outputs.empty()) {
-        ImGui::TextUnformatted("Selected node has no scalar outputs.");
+    if (preview_outputs.empty()) {
+        ImGui::TextUnformatted("Selected node has no scalar or Vec3 outputs.");
         return;
     }
 
-    if (std::find(scalar_outputs.begin(), scalar_outputs.end(),
-                  (std::size_t)preview_output_socket_index) == scalar_outputs.end()) {
-        preview_output_socket_index = (int)scalar_outputs.front();
+    if (std::find(preview_outputs.begin(), preview_outputs.end(),
+                  (std::size_t)preview_output_socket_index) == preview_outputs.end()) {
+        preview_output_socket_index = (int)preview_outputs.front();
     }
 
     if (ImGui::BeginCombo("Preview Output", preview_node->outputs[(std::size_t)preview_output_socket_index].name.c_str())) {
-        for (const std::size_t output_index : scalar_outputs) {
+        for (const std::size_t output_index : preview_outputs) {
             const bool selected = ((int)output_index == preview_output_socket_index);
             if (ImGui::Selectable(preview_node->outputs[output_index].name.c_str(), selected)) {
                 preview_output_socket_index = (int)output_index;
@@ -1135,6 +1199,10 @@ void App::draw_field_preview_panel() {
             }
         }
         ImGui::EndCombo();
+    }
+
+    if (const auto preview_type = current_preview_output_type()) {
+        ImGui::Text("Preview Type: %s", value_type_name(*preview_type));
     }
 
     auto normalize_bounds = [](float& min_value, float& max_value) {
@@ -1191,14 +1259,13 @@ void App::draw_field_preview_panel() {
     for (int y = 0; y < preview_grid_height; ++y) {
         for (int x = 0; x < preview_grid_width; ++x) {
             const std::size_t index = (std::size_t)(y * preview_grid_width + x);
-            const float value = std::clamp(preview_samples[index], 0.0f, 1.0f);
 
             const ImVec2 p1{
                 origin.x + x * (cell_size + cell_padding),
                 origin.y + y * (cell_size + cell_padding),
             };
             const ImVec2 p2{ p1.x + cell_size, p1.y + cell_size };
-            const ImU32 color = ImGui::GetColorU32(ImVec4(value, value * 0.8f, 0.15f + value * 0.85f, 1.0f));
+            const ImU32 color = ImGui::GetColorU32(preview_sample_color(preview_samples[index]));
 
             draw_list->AddRectFilled(p1, p2, color, 4.0f);
             draw_list->AddRect(p1, p2, ImGui::GetColorU32(ImVec4(0.12f, 0.12f, 0.14f, 1.0f)), 4.0f);
@@ -1212,7 +1279,10 @@ void App::draw_field_preview_panel() {
             }
             const Vec2 normalized = preview_normalized_from_world(probe.fixture.position);
             const PreviewProbeSample* exact_sample = find_preview_probe_sample(probe.fixture.id);
-            const float sample = std::clamp(exact_sample ? exact_sample->scalar_value : 0.0f, 0.0f, 1.0f);
+            const PreviewOutputSample preview_sample = exact_sample
+                ? PreviewOutputSample{ exact_sample->preview_scalar_value, exact_sample->preview_color_value }
+                : PreviewOutputSample{};
+            const float sample = preview_sample_intensity(preview_sample);
             const ImVec2 center{
                 origin.x + normalized[0] * ((preview_grid_width - 1) * (cell_size + cell_padding)),
                 origin.y + normalized[1] * ((preview_grid_height - 1) * (cell_size + cell_padding)),
@@ -1220,20 +1290,17 @@ void App::draw_field_preview_panel() {
             const bool selected = selected_preview_probe_id.has_value() && *selected_preview_probe_id == probe.fixture.id;
             const ImU32 ring_color = ImGui::GetColorU32(
                 selected ? ImVec4(1.0f, 0.95f, 0.35f, 1.0f) : ImVec4(1.0f, 1.0f, 1.0f, 0.95f));
-            ImVec4 probe_color = ImVec4(sample, 0.25f + sample * 0.75f, 0.2f, 1.0f);
-            if (exact_sample && exact_sample->color_value.has_value()) {
-                probe_color = ImVec4(
-                    (*exact_sample->color_value)[0],
-                    (*exact_sample->color_value)[1],
-                    (*exact_sample->color_value)[2],
-                    1.0f);
-            }
+            const ImVec4 probe_color = preview_sample_color(preview_sample);
             const ImU32 fill_color = ImGui::GetColorU32(probe_color);
             draw_list->AddCircleFilled(center, 5.0f, fill_color);
             draw_list->AddCircle(center, 7.0f, ring_color, 0, 2.0f);
 
             char label[32];
-            std::snprintf(label, sizeof(label), "%s %.2f", probe.fixture.name.c_str(), sample);
+            if (current_preview_output_type() == ValueType::Scalar) {
+                std::snprintf(label, sizeof(label), "%s %.2f", probe.fixture.name.c_str(), sample);
+            } else {
+                std::snprintf(label, sizeof(label), "%s", probe.fixture.name.c_str());
+            }
             draw_list->AddText(ImVec2(center.x + 8.0f, center.y - 8.0f),
                                ring_color,
                                label);
@@ -1335,13 +1402,26 @@ void App::draw_field_preview_panel() {
                 fixture_set_trait(probe.fixture, FixtureTrait::ColorRGB, color_rgb);
             }
 
-            const float sample = std::clamp(preview_sample_from_world(probe.fixture.position), 0.0f, 1.0f);
+            const PreviewOutputSample sample = preview_sample_from_world(probe.fixture.position);
             ImGui::Text("Traits: %s", format_fixture_traits(probe.fixture.traits).c_str());
-            ImGui::Text("World XYZ: [%.2f, %.2f, %.2f]  Sample: %.2f",
+            ImGui::Text("World XYZ: [%.2f, %.2f, %.2f]",
                         probe.fixture.position[0],
                         probe.fixture.position[1],
-                        probe.fixture.position[2],
-                        sample);
+                        probe.fixture.position[2]);
+            if (sample.scalar_value.has_value()) {
+                ImGui::Text("Preview sample: %.3f", *sample.scalar_value);
+            } else if (sample.color_value.has_value()) {
+                const Vec3 color = *sample.color_value;
+                ImGui::ColorButton("Preview Color",
+                                   ImVec4(color[0], color[1], color[2], 1.0f),
+                                   ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoDragDrop,
+                                   ImVec2(24.0f, 24.0f));
+                ImGui::SameLine();
+                ImGui::Text("Preview Color: [%.3f, %.3f, %.3f]",
+                            color[0], color[1], color[2]);
+            } else {
+                ImGui::TextUnformatted("Preview sample: unavailable");
+            }
             ImGui::Separator();
             ImGui::PopID();
         }
@@ -1385,8 +1465,22 @@ void App::draw_field_preview_panel() {
                             sample.world_position[2]);
                 ImGui::Text("Traits: %s", format_fixture_traits(probe->fixture.traits).c_str());
                 const std::string sample_label = current_preview_output_label();
-                ImGui::ProgressBar(sample.scalar_value, ImVec2(-1.0f, 0.0f), sample_label.c_str());
-                ImGui::Text("%s sample: %.3f", sample_label.c_str(), sample.scalar_value);
+                if (sample.preview_scalar_value.has_value()) {
+                    ImGui::ProgressBar(*sample.preview_scalar_value, ImVec2(-1.0f, 0.0f), sample_label.c_str());
+                    ImGui::Text("%s sample: %.3f", sample_label.c_str(), *sample.preview_scalar_value);
+                } else if (sample.preview_color_value.has_value()) {
+                    const Vec3 color = *sample.preview_color_value;
+                    ImGui::ColorButton("Preview Output",
+                                       ImVec4(color[0], color[1], color[2], 1.0f),
+                                       ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoDragDrop,
+                                       ImVec2(24.0f, 24.0f));
+                    ImGui::SameLine();
+                    ImGui::Text("%s sample: [%.3f, %.3f, %.3f]",
+                                sample_label.c_str(),
+                                color[0], color[1], color[2]);
+                } else {
+                    ImGui::Text("%s sample: unavailable", sample_label.c_str());
+                }
                 if (sample.dimmer_value.has_value() || sample.tilt_value.has_value()) {
                     char dimmer_buffer[16] = "--";
                     char tilt_buffer[16] = "--";
@@ -1400,8 +1494,8 @@ void App::draw_field_preview_panel() {
                                 dimmer_buffer,
                                 tilt_buffer);
                 }
-                if (sample.color_value.has_value()) {
-                    const Vec3 color = *sample.color_value;
+                if (sample.driver_color_value.has_value()) {
+                    const Vec3 color = *sample.driver_color_value;
                     ImGui::ColorButton("ColorRGB",
                                        ImVec4(color[0], color[1], color[2], 1.0f),
                                        ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoDragDrop,

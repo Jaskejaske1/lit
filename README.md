@@ -6,7 +6,7 @@ A node-graph-based lighting control engine. **Surface** for live busking (MA2-st
 
 - **Phase 0** (toolchain validation) — complete. SDL3 + ImGui + GL3W + OpenGL 4.6 GPU compute pipeline verified. Prototype code deleted; insights preserved.
 - **Phase 1.a** (substrate prototype baseline) — live. Registry, node instances, graph bake/topo order, init pass, and a real `Phase` generator now run on NixOS inside `lit_view`.
-- **Phase 1.b** (first spatial field preview slice) — live. `lit_view` now seeds a small animated scalar field, lets you wire scalar nodes together, and samples the result over a 2D probe grid.
+- **Phase 1.b** (first spatial field preview slice) — live. `lit_view` now seeds a small animated field, lets you wire scalar and minimal `Vec3` color nodes together, and samples the result over a 2D probe grid.
 - **Phase 1+** (real effect-building substrate) — still ahead. No baked runtime artifact, no packaged Intentions, and no true 3D field visualizer yet.
 
 ## Docs (read before any code change)
@@ -61,13 +61,15 @@ Current prototype baseline:
 - `lit_view` also lets you tweak disconnected input sockets and node state live, so the current prototype is a real substrate workbench rather than a read-only inspector.
 - `lit_view` now includes a minimal connection editor, so you can wire compatible outputs into inputs and exercise the real graph bake rules from inside the prototype UI.
 - `lit_view` now includes a first field-preview panel: each sampled cell owns its own persistent graph state, so temporal nodes can evolve differently across space.
-- The field preview still renders a user-controlled 2D `X,Y` heatmap, but it now does so with time history per probe instead of stateless re-sampling.
+- The field preview still renders a user-controlled 2D `X,Y` surface, but it now does so with time history per probe instead of stateless re-sampling.
 - `lit_view` can now overlay a simple default probe layout on top of that heatmap, which makes the preview feel closer to sampled fixture positions instead of a purely abstract field.
 - Those overlay probes are now explicit named sample points in the workbench, with editable world-space positions and a selected live probe that drives the inspector-side sample position.
 - `lit_view` now also exposes those sample points as concrete sampled outputs with IDs, positions, and scalar values, and those values now come from exact per-point persistent graph evaluation rather than nearest-cell heatmap lookup.
 - Those workbench sample points now sit on top of a minimal substrate-side `FixtureProbe` + `FixtureTrait` model, and the default bar probes now advertise `Dimmer`, `Tilt`, and `ColorRGB`.
 - The default sweep graph now terminates in a `SpatialFixtureDriver`, so one coupled graph-side fixture bridge publishes dimmer, tilt, and color instead of splitting the baseline patch across separate output nodes.
 - That same baseline patch now mixes white-to-red color per probe from the decay trail, which moves the workbench closer to the docs' red-sweep forcing function instead of a dimmer-only preview.
+- The field preview can now target either scalar or `Vec3` outputs directly, and the grid itself renders color when the selected preview output is `Vec3` instead of leaving color trapped in the probe overlay.
+- The seeded diagonal-sweep workbench now opens on the fixture driver's `ColorRGB` output by default, so the first view you get is the red field instead of a hidden scalar channel.
 - The sampled-point inspector now shows the exact per-probe preview sample plus the coupled fixture-driver dimmer/tilt values and `ColorRGB` swatch when that bridge is present.
 - The probe overlay now uses fixture-driver color when available, so the sampled bar layout reads more like a lighting sketch and less like a pure scalar debug surface.
 - On startup, `lit_view` now seeds a more effect-like 2D patch built from `ProbeX`, `ProbeY`, `SpatialMirror`, `TimeOffset`, `Sine`, `Decay`, and `Mix`, so the workbench starts closer to the diagonal-sweep ideas in the docs.
