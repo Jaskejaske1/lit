@@ -11,6 +11,7 @@
 // Validated by Phase 0, reused here with the new substrate on top.
 
 #include <algorithm>
+#include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <deque>
@@ -185,6 +186,8 @@ struct App {
     int          source_output_selection = 0;
     int          destination_node_selection = 0;
     int          destination_input_selection = 0;
+    char         node_spawn_filter[64] = "";
+    int          filtered_spawn_selection = 0;
     NodeId       preview_node_id = 0;
     NodeId       spatial_fixture_driver_node_id = 0;
     int          preview_output_socket_index = 0;
@@ -1805,6 +1808,59 @@ void App::draw_debug_panel() {
     // Spawn controls
     ImGui::Separator();
     ImGui::Text("Spawn:");
+    ImGui::SetNextItemWidth(240.0f);
+    ImGui::InputTextWithHint("##NodeSpawnFilter", "Search node types", node_spawn_filter,
+                             sizeof(node_spawn_filter));
+
+    auto lowercase_copy = [](std::string text) {
+        std::transform(text.begin(), text.end(), text.begin(),
+                       [](unsigned char c) { return (char)std::tolower(c); });
+        return text;
+    };
+
+    std::vector<const NodeType*> filtered_spawn_types;
+    const std::string filter = lowercase_copy(node_spawn_filter);
+    filtered_spawn_types.reserve(all.size());
+    for (const auto& [name, type] : all) {
+        const std::string searchable = lowercase_copy(
+            name + " " + type.display_name + " " + type.category);
+        if (filter.empty() || searchable.find(filter) != std::string::npos) {
+            filtered_spawn_types.push_back(&type);
+        }
+    }
+
+    if (!filtered_spawn_types.empty()) {
+        if (filtered_spawn_selection >= (int)filtered_spawn_types.size()) {
+            filtered_spawn_selection = 0;
+        }
+        const NodeType* selected_spawn_type =
+            filtered_spawn_types[(std::size_t)filtered_spawn_selection];
+        if (ImGui::BeginCombo("Quick Add Type", selected_spawn_type->display_name.c_str())) {
+            for (std::size_t i = 0; i < filtered_spawn_types.size(); ++i) {
+                const bool selected = ((int)i == filtered_spawn_selection);
+                const NodeType* type = filtered_spawn_types[i];
+                const std::string label = type->display_name + " [" + type->category + "]";
+                if (ImGui::Selectable(label.c_str(), selected)) {
+                    filtered_spawn_selection = (int)i;
+                }
+                if (selected) {
+                    ImGui::SetItemDefaultFocus();
+                }
+            }
+            ImGui::EndCombo();
+        }
+        if (ImGui::Button("Add Filtered Type")) {
+            spawn_node(selected_spawn_type->name.c_str());
+        }
+        ImGui::SameLine();
+        ImGui::TextDisabled("%zu match%s",
+                            filtered_spawn_types.size(),
+                            filtered_spawn_types.size() == 1 ? "" : "es");
+    } else {
+        filtered_spawn_selection = 0;
+        ImGui::TextDisabled("No matching node types.");
+    }
+
     if (ImGui::Button("Reset Diagonal Sweep")) {
         reset_default_patch();
     }
