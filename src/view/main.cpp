@@ -233,7 +233,9 @@ struct App {
     void draw_connections_panel();
     void draw_field_preview_panel();
     void draw_node(Node& n);
+    bool reset_default_patch();
     NodeId spawn_node(const char* type_name);
+    NodeId spawn_node_named(const char* type_name, const std::string& instance_name);
 };
 
 bool App::init() {
@@ -394,13 +396,16 @@ static bool rebuild_graph(Graph& graph, std::string* error_text = nullptr) {
 }
 
 NodeId App::spawn_node(const char* type_name) {
+    return spawn_node_named(type_name, std::string(type_name) + " #" + std::to_string(next_id));
+}
+
+NodeId App::spawn_node_named(const char* type_name, const std::string& instance_name) {
     const NodeType* t = find_node_type(type_name);
     if (!t) {
         fprintf(stderr, "spawn_node: type '%s' not found\n", type_name);
         return 0;
     }
     NodeId id = next_id++;
-    std::string instance_name = std::string(type_name) + " #" + std::to_string(id);
     graph.nodes.push_back(make_node(*t, id, instance_name));
 
     if (!rebuild_graph(graph, &last_graph_error)) {
@@ -458,19 +463,19 @@ bool App::try_add_connection(NodeId source_node_id, std::size_t source_socket_in
 }
 
 void App::seed_default_spatial_patch() {
-    const NodeId probe_x_id = spawn_node("ProbeX");
-    const NodeId probe_y_id = spawn_node("ProbeY");
-    const NodeId mirror_x_id = spawn_node("SpatialMirror");
-    const NodeId frequency_y_id = spawn_node("Constant");
-    const NodeId multiply_y_id = spawn_node("Multiply");
-    const NodeId spatial_add_id = spawn_node("Add");
-    const NodeId phase_id = spawn_node("Phase");
-    const NodeId time_offset_id = spawn_node("TimeOffset");
-    const NodeId sine_id = spawn_node("Sine");
-    const NodeId decay_id = spawn_node("Decay");
-    const NodeId background_id = spawn_node("Constant");
-    const NodeId peak_id = spawn_node("Constant");
-    const NodeId mix_id = spawn_node("Mix");
+    const NodeId probe_x_id = spawn_node_named("ProbeX", "Probe X");
+    const NodeId probe_y_id = spawn_node_named("ProbeY", "Probe Y");
+    const NodeId mirror_x_id = spawn_node_named("SpatialMirror", "Mirror Symmetry");
+    const NodeId frequency_y_id = spawn_node_named("Constant", "Y Frequency");
+    const NodeId multiply_y_id = spawn_node_named("Multiply", "Y Offset");
+    const NodeId spatial_add_id = spawn_node_named("Add", "Spatial Offset");
+    const NodeId phase_id = spawn_node_named("Phase", "Sweep Phase");
+    const NodeId time_offset_id = spawn_node_named("TimeOffset", "Phase Offset");
+    const NodeId sine_id = spawn_node_named("Sine", "Sweep Wave");
+    const NodeId decay_id = spawn_node_named("Decay", "Trail Decay");
+    const NodeId background_id = spawn_node_named("Constant", "Base Level");
+    const NodeId peak_id = spawn_node_named("Constant", "Peak Level");
+    const NodeId mix_id = spawn_node_named("Mix", "Dimmer Mix");
 
     if (!probe_x_id || !probe_y_id || !mirror_x_id || !frequency_y_id ||
         !multiply_y_id || !spatial_add_id || !phase_id || !time_offset_id ||
@@ -511,6 +516,23 @@ void App::seed_default_spatial_patch() {
 
     preview_node_id = mix_id;
     preview_output_socket_index = 0;
+}
+
+bool App::reset_default_patch() {
+    graph = Graph{};
+    next_id = 1;
+    next_connection_id = 1;
+    preview_node_id = 0;
+    preview_output_socket_index = 0;
+    source_node_selection = 0;
+    source_output_selection = 0;
+    destination_node_selection = 0;
+    destination_input_selection = 0;
+    last_graph_error.clear();
+    pending_delete_node_id.reset();
+    mark_preview_dirty();
+    seed_default_spatial_patch();
+    return running;
 }
 
 void App::seed_default_preview_probes() {
@@ -1304,6 +1326,10 @@ void App::draw_debug_panel() {
     // Spawn controls
     ImGui::Separator();
     ImGui::Text("Spawn:");
+    if (ImGui::Button("Reset Diagonal Sweep")) {
+        reset_default_patch();
+    }
+    ImGui::SameLine();
     if (ImGui::Button("Constant"))      spawn_node("Constant");
     ImGui::SameLine();
     if (ImGui::Button("Constant Vec3")) spawn_node("ConstantVec3");

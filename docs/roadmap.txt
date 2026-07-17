@@ -68,6 +68,7 @@ Phase 1 - Real substrate skeleton
   - The workbench now also materializes those named points into concrete sampled outputs with IDs, positions, and scalar values, and those values now come from exact per-point persistent graph evaluation instead of nearest-cell heatmap approximation.
   - Those Builder-side sample points now sit on top of a minimal substrate-side `FixtureProbe` + `FixtureTrait` model, with helper coverage in `test_substrate`.
   - The default seeded patch now uses symmetry, spatial offset, time offset, and decay, so the first-launch preview is closer to the diagonal-sweep forcing function than a generic oscillator demo.
+  - That seeded diagonal-sweep baseline is now an explicit reset action in `lit_view`, and its node instances are named for their effect role instead of only by type.
   - This is meaningful Builder progress, but it is still below the Phase 1 exit criterion because the preview is 2D, the runtime is not baked, and the test-case effect is not yet the diagonal-bars sweep.
 
 Phase 2 - Packaging (substrate module to Intention)
