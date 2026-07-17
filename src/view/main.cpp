@@ -157,6 +157,28 @@ std::optional<std::string> mirrored_probe_name(std::string_view name) {
     return std::nullopt;
 }
 
+std::string probe_group_key(std::string_view name) {
+    std::string key{name};
+    while (!key.empty() && std::isdigit((unsigned char)key.back())) {
+        key.pop_back();
+    }
+    while (!key.empty() && std::isspace((unsigned char)key.back())) {
+        key.pop_back();
+    }
+    return key;
+}
+
+int probe_numeric_suffix(std::string_view name) {
+    std::size_t digit_start = name.size();
+    while (digit_start > 0 && std::isdigit((unsigned char)name[digit_start - 1])) {
+        --digit_start;
+    }
+    if (digit_start == name.size()) {
+        return -1;
+    }
+    return std::atoi(std::string(name.substr(digit_start)).c_str());
+}
+
 enum class PreviewPlane {
     XY,
     XZ,
@@ -1726,17 +1748,6 @@ void App::draw_field_preview_panel() {
             });
         }
 
-        auto probe_group_key = [](const std::string& name) {
-            std::string key = name;
-            while (!key.empty() && std::isdigit((unsigned char)key.back())) {
-                key.pop_back();
-            }
-            while (!key.empty() && std::isspace((unsigned char)key.back())) {
-                key.pop_back();
-            }
-            return key;
-        };
-
         std::unordered_map<std::string, std::vector<std::size_t>> guide_groups;
         for (std::size_t i = 0; i < screen_probes.size(); ++i) {
             const std::string key = probe_group_key(screen_probes[i].probe->fixture.name);
@@ -2101,65 +2112,139 @@ void App::draw_field_preview_panel() {
         if (preview_probe_samples.empty()) {
             ImGui::TextUnformatted("No enabled sample points.");
         } else {
+            std::vector<const PreviewProbeSample*> ordered_samples;
+            ordered_samples.reserve(preview_probe_samples.size());
             for (const auto& sample : preview_probe_samples) {
-                const PreviewProbe* probe = find_preview_probe(sample.probe_id);
-                if (!probe) {
-                    continue;
-                }
+                ordered_samples.push_back(&sample);
+            }
+            std::sort(ordered_samples.begin(), ordered_samples.end(),
+                      [&](const PreviewProbeSample* a, const PreviewProbeSample* b) {
+                          const PreviewProbe* probe_a = find_preview_probe(a->probe_id);
+                          const PreviewProbe* probe_b = find_preview_probe(b->probe_id);
+                          const std::string key_a = probe_a ? probe_group_key(probe_a->fixture.name) : "";
+                          const std::string key_b = probe_b ? probe_group_key(probe_b->fixture.name) : "";
+                          if (key_a != key_b) {
+                              return key_a < key_b;
+                          }
 
-                ImGui::PushID((int)sample.probe_id);
-                const bool selected = selected_preview_probe_id.has_value() && *selected_preview_probe_id == sample.probe_id;
-                if (ImGui::Selectable(probe->fixture.name.c_str(), selected)) {
-                    selected_preview_probe_id = sample.probe_id;
-                }
-                ImGui::Text("ID: %llu  XYZ: [%.2f, %.2f, %.2f]",
-                            (unsigned long long)sample.probe_id,
-                            sample.world_position[0],
-                            sample.world_position[1],
-                            sample.world_position[2]);
-                ImGui::Text("Traits: %s", format_fixture_traits(probe->fixture.traits).c_str());
-                const std::string sample_label = current_preview_output_label();
-                if (sample.preview_scalar_value.has_value()) {
-                    ImGui::ProgressBar(*sample.preview_scalar_value, ImVec2(-1.0f, 0.0f), sample_label.c_str());
-                    ImGui::Text("%s sample: %.3f", sample_label.c_str(), *sample.preview_scalar_value);
-                } else if (sample.preview_color_value.has_value()) {
-                    const Vec3 color = *sample.preview_color_value;
-                    ImGui::ColorButton("Preview Output",
-                                       ImVec4(color[0], color[1], color[2], 1.0f),
-                                       ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoDragDrop,
-                                       ImVec2(24.0f, 24.0f));
-                    ImGui::SameLine();
-                    ImGui::Text("%s sample: [%.3f, %.3f, %.3f]",
-                                sample_label.c_str(),
-                                color[0], color[1], color[2]);
-                } else {
-                    ImGui::Text("%s sample: unavailable", sample_label.c_str());
-                }
-                if (sample.dimmer_value.has_value() || sample.tilt_value.has_value()) {
+                          const int suffix_a = probe_a ? probe_numeric_suffix(probe_a->fixture.name) : -1;
+                          const int suffix_b = probe_b ? probe_numeric_suffix(probe_b->fixture.name) : -1;
+                          if (suffix_a >= 0 && suffix_b >= 0 && suffix_a != suffix_b) {
+                              return suffix_a < suffix_b;
+                          }
+                          if (a->world_position[1] != b->world_position[1]) {
+                              return a->world_position[1] < b->world_position[1];
+                          }
+                          return a->probe_id < b->probe_id;
+                      });
+
+            char slice_column_label[32];
+            std::snprintf(slice_column_label, sizeof(slice_column_label), "%s Pos", world_axis_name(preview_slice_axis));
+            const std::string sample_label = current_preview_output_label();
+
+            if (ImGui::BeginTable("SampledPointsTable", 6,
+                                  ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
+                                  ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_ScrollY,
+                                  ImVec2(0.0f, 260.0f))) {
+                ImGui::TableSetupColumn("Probe", ImGuiTableColumnFlags_WidthStretch, 1.4f);
+                ImGui::TableSetupColumn("XYZ", ImGuiTableColumnFlags_WidthStretch, 1.5f);
+                ImGui::TableSetupColumn(slice_column_label, ImGuiTableColumnFlags_WidthStretch, 0.8f);
+                ImGui::TableSetupColumn(sample_label.c_str(), ImGuiTableColumnFlags_WidthStretch, 1.4f);
+                ImGui::TableSetupColumn("Driver", ImGuiTableColumnFlags_WidthStretch, 1.2f);
+                ImGui::TableSetupColumn("Color", ImGuiTableColumnFlags_WidthStretch, 1.0f);
+                ImGui::TableHeadersRow();
+
+                for (const PreviewProbeSample* sample : ordered_samples) {
+                    const PreviewProbe* probe = find_preview_probe(sample->probe_id);
+                    if (!probe) {
+                        continue;
+                    }
+
+                    ImGui::TableNextRow();
+                    ImGui::PushID((int)sample->probe_id);
+
+                    ImGui::TableSetColumnIndex(0);
+                    const bool selected = selected_preview_probe_id.has_value() && *selected_preview_probe_id == sample->probe_id;
+                    if (ImGui::Selectable(probe->fixture.name.c_str(), selected,
+                                          ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap)) {
+                        selected_preview_probe_id = sample->probe_id;
+                    }
+
+                    ImGui::TableSetColumnIndex(1);
+                    ImGui::Text("[%.2f, %.2f, %.2f]",
+                                sample->world_position[0],
+                                sample->world_position[1],
+                                sample->world_position[2]);
+
+                    ImGui::TableSetColumnIndex(2);
+                    ImGui::Text("%.3f", world_axis_value(sample->world_position, preview_slice_axis));
+
+                    ImGui::TableSetColumnIndex(3);
+                    if (sample->preview_scalar_value.has_value()) {
+                        ImGui::Text("%.3f", *sample->preview_scalar_value);
+                    } else if (sample->preview_color_value.has_value()) {
+                        const Vec3 color = *sample->preview_color_value;
+                        ImGui::ColorButton("ExactSampleColor",
+                                           ImVec4(color[0], color[1], color[2], 1.0f),
+                                           ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoDragDrop,
+                                           ImVec2(18.0f, 18.0f));
+                        ImGui::SameLine();
+                        ImGui::Text("[%.2f, %.2f, %.2f]", color[0], color[1], color[2]);
+                    } else {
+                        ImGui::TextUnformatted("--");
+                    }
+
+                    ImGui::TableSetColumnIndex(4);
                     char dimmer_buffer[16] = "--";
                     char tilt_buffer[16] = "--";
-                    if (sample.dimmer_value.has_value()) {
-                        std::snprintf(dimmer_buffer, sizeof(dimmer_buffer), "%.3f", *sample.dimmer_value);
+                    if (sample->dimmer_value.has_value()) {
+                        std::snprintf(dimmer_buffer, sizeof(dimmer_buffer), "%.3f", *sample->dimmer_value);
                     }
-                    if (sample.tilt_value.has_value()) {
-                        std::snprintf(tilt_buffer, sizeof(tilt_buffer), "%.3f", *sample.tilt_value);
+                    if (sample->tilt_value.has_value()) {
+                        std::snprintf(tilt_buffer, sizeof(tilt_buffer), "%.3f", *sample->tilt_value);
                     }
-                    ImGui::Text("Fixture driver: dimmer %s  tilt %s",
-                                dimmer_buffer,
-                                tilt_buffer);
+                    ImGui::Text("D %s  T %s", dimmer_buffer, tilt_buffer);
+
+                    ImGui::TableSetColumnIndex(5);
+                    if (sample->driver_color_value.has_value()) {
+                        const Vec3 color = *sample->driver_color_value;
+                        ImGui::ColorButton("DriverColor",
+                                           ImVec4(color[0], color[1], color[2], 1.0f),
+                                           ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoDragDrop,
+                                           ImVec2(18.0f, 18.0f));
+                        ImGui::SameLine();
+                        ImGui::Text("%.2f %.2f %.2f", color[0], color[1], color[2]);
+                    } else {
+                        ImGui::TextUnformatted("--");
+                    }
+
+                    ImGui::PopID();
                 }
-                if (sample.driver_color_value.has_value()) {
-                    const Vec3 color = *sample.driver_color_value;
-                    ImGui::ColorButton("ColorRGB",
-                                       ImVec4(color[0], color[1], color[2], 1.0f),
-                                       ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoDragDrop,
-                                       ImVec2(24.0f, 24.0f));
-                    ImGui::SameLine();
-                    ImGui::Text("Color RGB: [%.3f, %.3f, %.3f]",
-                                color[0], color[1], color[2]);
+
+                ImGui::EndTable();
+            }
+
+            if (const PreviewProbe* selected_probe = selected_preview_probe()) {
+                if (const PreviewProbeSample* selected_sample = find_preview_probe_sample(selected_probe->fixture.id)) {
+                    ImGui::Separator();
+                    ImGui::Text("Selected row traits: %s",
+                                format_fixture_traits(selected_probe->fixture.traits).c_str());
+                    if (selected_sample->dimmer_value.has_value() ||
+                        selected_sample->tilt_value.has_value() ||
+                        selected_sample->driver_color_value.has_value()) {
+                        char dimmer_buffer[16] = "--";
+                        char tilt_buffer[16] = "--";
+                        if (selected_sample->dimmer_value.has_value()) {
+                            std::snprintf(dimmer_buffer, sizeof(dimmer_buffer), "%.3f", *selected_sample->dimmer_value);
+                        }
+                        if (selected_sample->tilt_value.has_value()) {
+                            std::snprintf(tilt_buffer, sizeof(tilt_buffer), "%.3f", *selected_sample->tilt_value);
+                        }
+                        ImGui::Text("Selected driver: dimmer %s  tilt %s",
+                                    dimmer_buffer,
+                                    tilt_buffer);
+                    }
                 }
-                ImGui::Separator();
-                ImGui::PopID();
             }
         }
         ImGui::TreePop();
