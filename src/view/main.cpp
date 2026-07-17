@@ -139,13 +139,6 @@ std::string format_fixture_traits(const std::vector<FixtureTrait>& traits) {
     return result;
 }
 
-std::string primary_trait_label(const FixtureProbe& probe) {
-    if (probe.traits.empty()) {
-        return "Scalar";
-    }
-    return std::string(fixture_trait_name(probe.traits.front()));
-}
-
 // ============================================================================
 // Application
 // ============================================================================
@@ -217,6 +210,7 @@ struct App {
     const PreviewProbe* find_preview_probe(uint64_t id) const;
     const PreviewProbeSample* find_preview_probe_sample(uint64_t id) const;
     const PreviewProbe* selected_preview_probe() const;
+    std::string current_preview_output_label() const;
     void ensure_preview_probe_selection();
     std::size_t enabled_preview_probe_count() const;
     bool rebuild_preview_graphs();
@@ -476,10 +470,11 @@ void App::seed_default_spatial_patch() {
     const NodeId background_id = spawn_node_named("Constant", "Base Level");
     const NodeId peak_id = spawn_node_named("Constant", "Peak Level");
     const NodeId mix_id = spawn_node_named("Mix", "Dimmer Mix");
+    const NodeId output_dimmer_id = spawn_node_named("OutputDimmer", "Dimmer Output");
 
     if (!probe_x_id || !probe_y_id || !mirror_x_id || !frequency_y_id ||
         !multiply_y_id || !spatial_add_id || !phase_id || !time_offset_id ||
-        !sine_id || !decay_id || !background_id || !peak_id || !mix_id) {
+        !sine_id || !decay_id || !background_id || !peak_id || !mix_id || !output_dimmer_id) {
         return;
     }
 
@@ -513,8 +508,9 @@ void App::seed_default_spatial_patch() {
     if (!try_add_connection(background_id, 0, mix_id, 0)) return;
     if (!try_add_connection(peak_id, 0, mix_id, 1)) return;
     if (!try_add_connection(decay_id, 0, mix_id, 2)) return;
+    if (!try_add_connection(mix_id, 0, output_dimmer_id, 0)) return;
 
-    preview_node_id = mix_id;
+    preview_node_id = output_dimmer_id;
     preview_output_socket_index = 0;
 }
 
@@ -642,6 +638,15 @@ const PreviewProbe* App::selected_preview_probe() const {
         return nullptr;
     }
     return probe;
+}
+
+std::string App::current_preview_output_label() const {
+    const Node* preview_node = graph.find_node(preview_node_id);
+    if (!preview_node || preview_output_socket_index < 0 ||
+        preview_output_socket_index >= (int)preview_node->outputs.size()) {
+        return "Sample";
+    }
+    return preview_node->outputs[(std::size_t)preview_output_socket_index].name;
 }
 
 void App::ensure_preview_probe_selection() {
@@ -1298,7 +1303,7 @@ void App::draw_field_preview_panel() {
                             sample.world_position[1],
                             sample.world_position[2]);
                 ImGui::Text("Traits: %s", format_fixture_traits(probe->fixture.traits).c_str());
-                const std::string sample_label = primary_trait_label(probe->fixture);
+                const std::string sample_label = current_preview_output_label();
                 ImGui::ProgressBar(sample.scalar_value, ImVec2(-1.0f, 0.0f), sample_label.c_str());
                 ImGui::Text("%s sample: %.3f", sample_label.c_str(), sample.scalar_value);
                 ImGui::Separator();
@@ -1341,6 +1346,8 @@ void App::draw_debug_panel() {
     if (ImGui::Button("Multiply"))      spawn_node("Multiply");
     ImGui::SameLine();
     if (ImGui::Button("Mix"))           spawn_node("Mix");
+    ImGui::SameLine();
+    if (ImGui::Button("Output Dimmer")) spawn_node("OutputDimmer");
     ImGui::SameLine();
     if (ImGui::Button("Sine"))          spawn_node("Sine");
     ImGui::SameLine();

@@ -55,6 +55,7 @@ Current prototype baseline:
 - `test_substrate` now also validates graph bake/topo order, init pass behavior, cycle rejection, and the built-in `Phase`, `Multiply`, `Sine`, `ProbeX`, and `ProbeY` nodes.
 - `test_substrate` now also covers the first test-case-oriented modifiers: `Mix`, `TimeOffset`, `SpatialMirror`, and `Decay`.
 - `test_substrate` now also covers the minimal fixture/probe helpers that back the Builder-side sample-point model.
+- `test_substrate` now also covers `OutputDimmer`, the first graph-side output primitive for sampled fixtures.
 - `lit_view` opens a debug console for the current substrate types, including a live `Phase` node whose output advances over time.
 - `lit_view` also lets you tweak disconnected input sockets and node state live, so the current prototype is a real substrate workbench rather than a read-only inspector.
 - `lit_view` now includes a minimal connection editor, so you can wire compatible outputs into inputs and exercise the real graph bake rules from inside the prototype UI.
@@ -64,6 +65,7 @@ Current prototype baseline:
 - Those overlay probes are now explicit named sample points in the workbench, with editable world-space positions and a selected live probe that drives the inspector-side sample position.
 - `lit_view` now also exposes those sample points as concrete sampled outputs with IDs, positions, and scalar values, and those values now come from exact per-point persistent graph evaluation rather than nearest-cell heatmap lookup.
 - Those workbench sample points now sit on top of a minimal substrate-side `FixtureProbe` + `FixtureTrait` model, which is the first small bridge toward the docs' fixture/probe layer.
+- The default sweep graph now terminates in `OutputDimmer`, so the sampled-point surface is driven by an explicit graph-side output node instead of an arbitrary internal scalar.
 - On startup, `lit_view` now seeds a more effect-like 2D patch built from `ProbeX`, `ProbeY`, `SpatialMirror`, `TimeOffset`, `Sine`, `Decay`, and `Mix`, so the workbench starts closer to the diagonal-sweep ideas in the docs.
 - `lit_view` can now explicitly reset itself back to that diagonal-sweep baseline, and the seeded graph uses named node instances instead of generic type-number labels.
 

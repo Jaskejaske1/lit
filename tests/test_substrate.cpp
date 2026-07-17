@@ -184,13 +184,14 @@ int test_fixture_probe_trait_helpers() {
 
 int test_all_node_types() {
     const auto& all = all_node_types();
-    CHECK(all.size() >= 12);
+    CHECK(all.size() >= 13);
     CHECK(all.count("Constant") == 1);
     CHECK(all.count("ConstantVec3") == 1);
     CHECK(all.count("Mix") == 1);
     CHECK(all.count("TimeOffset") == 1);
     CHECK(all.count("SpatialMirror") == 1);
     CHECK(all.count("Decay") == 1);
+    CHECK(all.count("OutputDimmer") == 1);
     CHECK(all.count("Multiply") == 1);
     CHECK(all.count("Sine") == 1);
     CHECK(all.count("ProbeX") == 1);
@@ -491,6 +492,23 @@ int test_decay_node_holds_peaks_and_decays_over_time() {
     return 0;
 }
 
+int test_output_dimmer_clamps_scalar_output() {
+    const NodeType* output_dimmer = find_node_type("OutputDimmer");
+    CHECK(output_dimmer != nullptr);
+
+    Node n = make_node(*output_dimmer, 69, "OutputDimmer");
+    n.inputs[0].current = SocketValue{Scalar{1.3f}};
+    n.type->evaluate(n, 0.0f, 0.0f, true);
+    CHECK(std::get<Scalar>(n.outputs[0].current) == 1.0f);
+
+    n.inputs[0].current = SocketValue{Scalar{-0.25f}};
+    n.type->evaluate(n, 0.0f, 0.0f, true);
+    CHECK(std::get<Scalar>(n.outputs[0].current) == 0.0f);
+
+    PASS("OutputDimmer node clamps scalar output into dimmer range");
+    return 0;
+}
+
 // ----------------------------------------------------------------------------
 
 int main() {
@@ -516,6 +534,7 @@ int main() {
     rc |= test_time_offset_wraps_normalized_signal();
     rc |= test_spatial_mirror_folds_position_around_center();
     rc |= test_decay_node_holds_peaks_and_decays_over_time();
+    rc |= test_output_dimmer_clamps_scalar_output();
 
     if (rc == 0) {
         std::cout << "\nAll substrate tests passed.\n";
