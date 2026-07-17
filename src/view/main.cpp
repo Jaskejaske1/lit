@@ -135,6 +135,12 @@ struct PreviewProbe {
     bool enabled = true;
 };
 
+struct PreviewProbeSample {
+    uint64_t probe_id = 0;
+    Vec2 world_position{0.0f, 0.0f};
+    float scalar_value = 0.0f;
+};
+
 struct App {
     static constexpr int preview_grid_width = 16;
     static constexpr int preview_grid_height = 10;
@@ -163,6 +169,7 @@ struct App {
     std::vector<Graph> preview_graphs;
     std::vector<float> preview_samples;
     std::vector<PreviewProbe> preview_probes;
+    std::vector<PreviewProbeSample> preview_probe_samples;
     std::string  last_graph_error;
     std::optional<NodeId> pending_delete_node_id;
     double       last_tick_time = 0.0;
@@ -185,6 +192,7 @@ struct App {
     void ensure_preview_probe_selection();
     bool rebuild_preview_graphs();
     bool refresh_preview_samples();
+    void refresh_preview_probe_samples();
     std::optional<float> extract_preview_output(const Graph& source_graph) const;
 
     bool init();
@@ -300,7 +308,10 @@ void App::tick(float dt) {
 
     if (!refresh_preview_samples()) {
         running = false;
+        return;
     }
+
+    refresh_preview_probe_samples();
 }
 
 static bool rebuild_graph(Graph& graph, std::string* error_text = nullptr) {
@@ -605,6 +616,22 @@ bool App::refresh_preview_samples() {
     }
 
     return true;
+}
+
+void App::refresh_preview_probe_samples() {
+    preview_probe_samples.clear();
+    preview_probe_samples.reserve(preview_probes.size());
+
+    for (const auto& probe : preview_probes) {
+        if (!probe.enabled) {
+            continue;
+        }
+        preview_probe_samples.push_back(PreviewProbeSample{
+            probe.id,
+            preview_position_from_normalized(probe.normalized_position),
+            std::clamp(preview_sample_from_normalized(probe.normalized_position), 0.0f, 1.0f),
+        });
+    }
 }
 
 void App::draw_node(Node& n) {
@@ -938,6 +965,9 @@ void App::draw_field_preview_panel() {
             return;
         }
     }
+    if (preview_probe_samples.empty() && !preview_samples.empty()) {
+        refresh_preview_probe_samples();
+    }
 
     constexpr float cell_size = 22.0f;
     constexpr float cell_padding = 3.0f;
@@ -1072,6 +1102,34 @@ void App::draw_field_preview_panel() {
             ensure_preview_probe_selection();
         }
 
+        ImGui::TreePop();
+    }
+
+    if (ImGui::TreeNode("Sampled Points")) {
+        if (preview_probe_samples.empty()) {
+            ImGui::TextUnformatted("No enabled sample points.");
+        } else {
+            for (const auto& sample : preview_probe_samples) {
+                const PreviewProbe* probe = find_preview_probe(sample.probe_id);
+                if (!probe) {
+                    continue;
+                }
+
+                ImGui::PushID((int)sample.probe_id);
+                const bool selected = selected_preview_probe_id.has_value() && *selected_preview_probe_id == sample.probe_id;
+                if (ImGui::Selectable(probe->name.c_str(), selected)) {
+                    selected_preview_probe_id = sample.probe_id;
+                }
+                ImGui::Text("ID: %llu  XY: [%.2f, %.2f]",
+                            (unsigned long long)sample.probe_id,
+                            sample.world_position[0],
+                            sample.world_position[1]);
+                ImGui::ProgressBar(sample.scalar_value, ImVec2(-1.0f, 0.0f), "Dimmer");
+                ImGui::Text("Scalar sample: %.3f", sample.scalar_value);
+                ImGui::Separator();
+                ImGui::PopID();
+            }
+        }
         ImGui::TreePop();
     }
 }
