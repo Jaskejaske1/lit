@@ -1478,7 +1478,20 @@ void App::draw_field_preview_panel() {
     constexpr float cell_size = 22.0f;
     constexpr float cell_padding = 3.0f;
     const ImVec2 origin = ImGui::GetCursorScreenPos();
+    const ImVec2 preview_size{
+        ((preview_grid_width - 1) * (cell_size + cell_padding)) + cell_size,
+        ((preview_grid_height - 1) * (cell_size + cell_padding)) + cell_size,
+    };
     ImDrawList* draw_list = ImGui::GetWindowDrawList();
+
+    struct ScreenProbeInfo {
+        const PreviewProbe* probe = nullptr;
+        PreviewOutputSample sample;
+        float intensity = 0.0f;
+        ImVec2 center;
+    };
+    std::vector<ScreenProbeInfo> screen_probes;
+    screen_probes.reserve(preview_probes.size());
 
     for (int y = 0; y < preview_grid_height; ++y) {
         for (int x = 0; x < preview_grid_width; ++x) {
@@ -1511,29 +1524,99 @@ void App::draw_field_preview_panel() {
                 origin.x + normalized[0] * ((preview_grid_width - 1) * (cell_size + cell_padding)),
                 origin.y + normalized[1] * ((preview_grid_height - 1) * (cell_size + cell_padding)),
             };
+            screen_probes.push_back(ScreenProbeInfo{
+                &probe,
+                preview_sample,
+                sample,
+                center,
+            });
+        }
+
+        auto probe_group_key = [](const std::string& name) {
+            std::string key = name;
+            while (!key.empty() && std::isdigit((unsigned char)key.back())) {
+                key.pop_back();
+            }
+            while (!key.empty() && std::isspace((unsigned char)key.back())) {
+                key.pop_back();
+            }
+            return key;
+        };
+
+        std::unordered_map<std::string, std::vector<std::size_t>> guide_groups;
+        for (std::size_t i = 0; i < screen_probes.size(); ++i) {
+            const std::string key = probe_group_key(screen_probes[i].probe->fixture.name);
+            if (!key.empty()) {
+                guide_groups[key].push_back(i);
+            }
+        }
+
+        for (auto& [_, indices] : guide_groups) {
+            if (indices.size() < 2) {
+                continue;
+            }
+
+            std::sort(indices.begin(), indices.end(),
+                      [&](std::size_t a, std::size_t b) {
+                          return screen_probes[a].probe->fixture.position[1]
+                              < screen_probes[b].probe->fixture.position[1];
+                      });
+
+            std::vector<ImVec2> path;
+            path.reserve(indices.size());
+            for (const std::size_t index : indices) {
+                path.push_back(screen_probes[index].center);
+            }
+            draw_list->AddPolyline(path.data(), (int)path.size(),
+                                   ImGui::GetColorU32(ImVec4(1.0f, 1.0f, 1.0f, 0.18f)),
+                                   0, 2.0f);
+        }
+
+        for (const auto& screen_probe : screen_probes) {
+            const auto& probe = *screen_probe.probe;
             const bool selected = selected_preview_probe_id.has_value() && *selected_preview_probe_id == probe.fixture.id;
             const ImU32 ring_color = ImGui::GetColorU32(
                 selected ? ImVec4(1.0f, 0.95f, 0.35f, 1.0f) : ImVec4(1.0f, 1.0f, 1.0f, 0.95f));
-            const ImVec4 probe_color = preview_sample_color(preview_sample);
+            const ImVec4 probe_color = preview_sample_color(screen_probe.sample);
             const ImU32 fill_color = ImGui::GetColorU32(probe_color);
-            draw_list->AddCircleFilled(center, 5.0f, fill_color);
-            draw_list->AddCircle(center, 7.0f, ring_color, 0, 2.0f);
+            draw_list->AddCircleFilled(screen_probe.center, 5.0f, fill_color);
+            draw_list->AddCircle(screen_probe.center, 7.0f, ring_color, 0, 2.0f);
 
             char label[32];
             if (current_preview_output_type() == ValueType::Scalar) {
-                std::snprintf(label, sizeof(label), "%s %.2f", probe.fixture.name.c_str(), sample);
+                std::snprintf(label, sizeof(label), "%s %.2f", probe.fixture.name.c_str(), screen_probe.intensity);
             } else {
                 std::snprintf(label, sizeof(label), "%s", probe.fixture.name.c_str());
             }
-            draw_list->AddText(ImVec2(center.x + 8.0f, center.y - 8.0f),
+            draw_list->AddText(ImVec2(screen_probe.center.x + 8.0f, screen_probe.center.y - 8.0f),
                                ring_color,
                                label);
         }
     }
 
-    ImGui::Dummy(ImVec2(
-        preview_grid_width * (cell_size + cell_padding),
-        preview_grid_height * (cell_size + cell_padding)));
+    ImGui::Dummy(preview_size);
+    if (show_preview_probes &&
+        ImGui::IsWindowHovered() &&
+        ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+        const ImVec2 mouse = ImGui::GetIO().MousePos;
+        if (mouse.x >= origin.x && mouse.x <= (origin.x + preview_size.x) &&
+            mouse.y >= origin.y && mouse.y <= (origin.y + preview_size.y)) {
+            const ScreenProbeInfo* nearest_probe = nullptr;
+            float nearest_distance_sq = 14.0f * 14.0f;
+            for (const auto& screen_probe : screen_probes) {
+                const float dx = mouse.x - screen_probe.center.x;
+                const float dy = mouse.y - screen_probe.center.y;
+                const float distance_sq = dx * dx + dy * dy;
+                if (distance_sq <= nearest_distance_sq) {
+                    nearest_distance_sq = distance_sq;
+                    nearest_probe = &screen_probe;
+                }
+            }
+            if (nearest_probe) {
+                selected_preview_probe_id = nearest_probe->probe->fixture.id;
+            }
+        }
+    }
     const Vec2 center = preview_probe_center();
     const std::optional<ValueType> preview_type = current_preview_output_type();
     float preview_min = 1.0f;
