@@ -910,6 +910,12 @@ void App::draw_node(Node& n) {
         pending_delete_node_id = n.id;
     }
 
+    char name_buffer[128];
+    std::snprintf(name_buffer, sizeof(name_buffer), "%s", n.name.c_str());
+    if (ImGui::InputText("Name", name_buffer, sizeof(name_buffer))) {
+        n.name = name_buffer;
+    }
+
     std::vector<char> comments_buffer(std::max<std::size_t>(n.comments.size() + 256, 1024), '\0');
     std::snprintf(comments_buffer.data(), comments_buffer.size(), "%s", n.comments.c_str());
     if (ImGui::InputTextMultiline("Comments", comments_buffer.data(), comments_buffer.size(),

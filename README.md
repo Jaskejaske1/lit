@@ -59,7 +59,7 @@ Current prototype baseline:
 - `test_substrate` now also covers `MixVec3` and `SpatialFixtureDriver`, so the prototype now has a minimal Vec3 color-mixing path and a coupled fixture bridge for dimmer, tilt, and color.
 - `lit_view` opens a debug console for the current substrate types, including a live `Phase` node whose output advances over time.
 - `lit_view` also lets you tweak disconnected input sockets and node state live, so the current prototype is a real substrate workbench rather than a read-only inspector.
-- The node inspector now also exposes free-text per-node comments and surfaces bypassed nodes directly in the node header, so graph intent and muted branches are easier to track as the prototype grows.
+- The node inspector now also exposes node renaming, free-text per-node comments, and bypass state directly in the header, so graph identity, intent, and muted branches are easier to track as the prototype grows.
 - `lit_view` now includes a minimal connection editor, so you can wire compatible outputs into inputs and exercise the real graph bake rules from inside the prototype UI.
 - That connection editor now filters out wrong-type sockets, already-occupied inputs, and self-connections up front, so the Builder-side graph workflow spends less time on guaranteed-invalid wiring attempts.
 - That same Connections panel now shows the selected source value plus each live connection's transported source/input values, so the Builder workbench has a first concrete slice of "wires carry actual values" observability even before a real node-canvas UI exists.
