@@ -1065,11 +1065,22 @@ void App::draw_connections_panel() {
     const Socket& source_output = source_node.outputs[(std::size_t)source_output_selection];
     ImGui::Text("Connection Type: %s", value_type_name(source_output.type));
 
+    auto input_already_connected = [&](NodeId node_id, std::size_t input_index) {
+        for (const auto& connection : graph.connections) {
+            if (connection.destination.node_id == node_id &&
+                connection.destination.socket_index == input_index) {
+                return true;
+            }
+        }
+        return false;
+    };
+
     auto compatible_inputs_for_node = [&](const Node& node) {
         std::vector<int> compatible_inputs;
         compatible_inputs.reserve(node.inputs.size());
         for (std::size_t i = 0; i < node.inputs.size(); ++i) {
-            if (node.inputs[i].type == source_output.type) {
+            if (node.inputs[i].type == source_output.type &&
+                !input_already_connected(node.id, i)) {
                 compatible_inputs.push_back((int)i);
             }
         }
@@ -1078,6 +1089,9 @@ void App::draw_connections_panel() {
 
     std::vector<int> compatible_destination_nodes;
     for (std::size_t i = 0; i < graph.nodes.size(); ++i) {
+        if (graph.nodes[i].id == source_node.id) {
+            continue;
+        }
         if (!compatible_inputs_for_node(graph.nodes[i]).empty()) {
             compatible_destination_nodes.push_back((int)i);
         }
