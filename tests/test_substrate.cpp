@@ -184,7 +184,8 @@ int test_fixture_probe_trait_helpers() {
 
 int test_all_node_types() {
     const auto& all = all_node_types();
-    CHECK(all.size() >= 18);
+    CHECK(all.size() >= 19);
+    CHECK(all.count("BPMTap") == 1);
     CHECK(all.count("Constant") == 1);
     CHECK(all.count("ConstantVec3") == 1);
     CHECK(all.count("Mix") == 1);
@@ -359,6 +360,25 @@ int test_phase_node_advances_and_wraps() {
     CHECK(std::get<Scalar>(g.find_node(41)->state["phase"]) == 0.0f);
 
     PASS("Phase node advances by dt/period and wraps cleanly");
+    return 0;
+}
+
+int test_bpm_tap_node_outputs_bpm_and_period() {
+    const NodeType* bpm_tap = find_node_type("BPMTap");
+    CHECK(bpm_tap != nullptr);
+
+    Node n = make_node(*bpm_tap, 60, "BPM Tap");
+    n.state["bpm"] = SocketValue{Scalar{100.0f}};
+    n.type->evaluate(n, 0.0f, 0.0f, true);
+    CHECK(std::abs(std::get<Scalar>(n.outputs[0].current) - 100.0f) < 0.0001f);
+    CHECK(std::abs(std::get<Scalar>(n.outputs[1].current) - 0.6f) < 0.0001f);
+
+    n.state["bpm"] = SocketValue{Scalar{500.0f}};
+    n.type->evaluate(n, 0.0f, 0.0f, true);
+    CHECK(std::abs(std::get<Scalar>(n.outputs[0].current) - 300.0f) < 0.0001f);
+    CHECK(std::abs(std::get<Scalar>(n.outputs[1].current) - 0.2f) < 0.0001f);
+
+    PASS("BPM Tap node exposes clamped BPM and beat period outputs");
     return 0;
 }
 
@@ -629,6 +649,7 @@ int main() {
     rc |= test_graph_rejects_multiple_sources_to_one_input();
     rc |= test_graph_init_pass_does_not_advance_time_sensitive_state();
     rc |= test_phase_node_advances_and_wraps();
+    rc |= test_bpm_tap_node_outputs_bpm_and_period();
     rc |= test_multiply_node_multiplies_inputs();
     rc |= test_probe_coordinate_nodes_read_sample_position();
     rc |= test_sine_node_maps_phase_to_unit_interval();

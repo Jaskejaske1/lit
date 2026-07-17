@@ -76,9 +76,10 @@ Phase 1 - Real substrate skeleton
   - The field preview grid can now render those `Vec3` color outputs directly when the selected preview target is color, instead of limiting the main surface to scalar heatmaps.
   - That seeded diagonal-sweep baseline now opens on the fixture driver's `ColorRGB` output by default, so the first preview reads like the red-sweep test case instead of a hidden scalar channel.
   - The field preview now also reports lightweight summary stats, including min/max/average intensity and average color for `Vec3` previews, so the current Builder workbench exposes more than just raw cells and probe labels.
+  - The starter primitive set now includes a first `BPMTap` node with Builder-side tap-tempo controls, which replaces the old hidden fixed sweep period with an explicit tempo source.
   - The sampled-point inspector now shows those coupled driver values per probe, including a `ColorRGB` swatch, and the probe overlay now uses fixture-driver color when available.
   - The default seeded patch now keeps dimmer at full intensity, mixes a white-to-red color trail per probe, and drives tilt as a range mix from that same trail signal, which moves the Builder prototype closer to the red-sweep forcing function in the docs instead of only previewing scalar intensity.
-  - The default seeded patch now uses symmetry, spatial offset, a wrapped ramp, time offset, and decay, so the first-launch preview is closer to the diagonal-sweep forcing function than a generic oscillator demo.
+  - The default seeded patch now uses symmetry, spatial offset, `BPMTap`, a wrapped ramp, time offset, and decay, and it derives the sweep period from beat period times a beats-per-sweep constant, so the first-launch preview is closer to the diagonal-sweep forcing function than a generic oscillator demo.
   - That seeded diagonal-sweep baseline is now an explicit reset action in `lit_view`, and its node instances are named for their effect role instead of only by type.
   - This is meaningful Builder progress, but it is still below the Phase 1 exit criterion because the preview is 2D, the runtime is not baked, and the test-case effect is not yet the diagonal-bars sweep.
 

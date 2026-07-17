@@ -76,7 +76,8 @@ Current prototype baseline:
 - The field preview now also reports lightweight output summary stats, including min/max/average intensity and average color for `Vec3` previews, so iteration is less guesswork-heavy.
 - The sampled-point inspector now shows the exact per-probe preview sample plus the coupled fixture-driver dimmer/tilt values and `ColorRGB` swatch when that bridge is present.
 - The probe overlay now uses fixture-driver color when available, so the sampled bar layout reads more like a lighting sketch and less like a pure scalar debug surface.
-- On startup, `lit_view` now seeds a more effect-like 2D patch built from `ProbeX`, `ProbeY`, `SpatialMirror`, `TimeOffset`, `Ramp`, `Decay`, and `Mix`, so the workbench starts closer to the diagonal-sweep ideas in the docs.
+- `lit_view` now includes a first `BPMTap` primitive with manual tap-tempo controls in the node inspector, so tempo is no longer just a hardcoded period hidden inside `Phase`.
+- On startup, `lit_view` now seeds a more effect-like 2D patch built from `BPMTap`, `Phase`, `ProbeX`, `ProbeY`, `SpatialMirror`, `TimeOffset`, `Ramp`, `Decay`, and `Mix`, and it derives sweep period from beat period times a beats-per-sweep constant, so the workbench starts closer to the diagonal-sweep ideas in the docs.
 - `lit_view` can now explicitly reset itself back to that diagonal-sweep baseline, and the seeded graph uses named node instances instead of generic type-number labels.
 
 This is still a prototype baseline, not the real Phase 1 engine. See

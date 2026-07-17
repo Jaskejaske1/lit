@@ -117,7 +117,7 @@ Initialization (cold start, warm start, init pass)
 ==================================================
 Every graph needs defined outputs at tick=0. The substrate handles this in three layers — no flicker, no arbitrary magic numbers.
 
-- **Type defaults** — every Type declares natural cold-start values for its state fields in `state_schema` (e.g., Phase `state.phase = 0`, Decay `state.prev_value = null`, BPM Tap `state.last_beat = null`). These are the math's natural starting point, not arbitrary.
+- **Type defaults** — every Type declares natural cold-start values for its state fields in `state_schema` (e.g., Phase `state.phase = 0`, Decay `state.prev_value = 0`, BPM Tap `state.bpm = 120`). These are the math's natural starting point, not arbitrary.
 - **Preset overrides** — instantiating a Preset writes per-instance initial values into the Node's state (e.g., a "Sweep Starting Mid-Cycle" Preset sets `state.phase = π/2` for its Phase node). Presets own per-instance defaults; Types own type-level defaults. Both layers needed.
 - **Init pass** — before tick=0, the engine walks the DAG once in topo order and asks each node to produce its initial outputs from current state + initial inputs. Time does NOT advance. Counters do NOT increment. Result: tick=0 produces coherent outputs. First live frame is correct.
 - **Warm start across switches** — when the operator switches Intentions mid-show, the outgoing Intention's state is saved and restored as the init state if it returns later. Phase counters continue from where they were. Continuity, not jump.

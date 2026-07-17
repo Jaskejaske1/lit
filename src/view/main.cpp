@@ -13,8 +13,10 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
+#include <deque>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include <SDL3/SDL.h>
@@ -199,6 +201,7 @@ struct App {
     std::vector<PreviewOutputSample> preview_samples;
     std::vector<PreviewProbe> preview_probes;
     std::vector<PreviewProbeSample> preview_probe_samples;
+    std::unordered_map<NodeId, std::deque<double>> bpm_tap_history_seconds;
     std::string  last_graph_error;
     std::optional<NodeId> pending_delete_node_id;
     double       last_tick_time = 0.0;
@@ -228,6 +231,8 @@ struct App {
     bool rebuild_preview_probe_graphs();
     bool refresh_preview_samples();
     void refresh_preview_probe_samples();
+    void clear_bpm_tap_history(NodeId id);
+    void tap_bpm(Node& node);
     PreviewOutputSample extract_preview_output(const Graph& source_graph) const;
     std::optional<float> extract_node_output_scalar(const Graph& source_graph, NodeId node_id, std::size_t output_index) const;
     std::optional<Vec3> extract_node_output_vec3(const Graph& source_graph, NodeId node_id, std::size_t output_index) const;
@@ -429,6 +434,52 @@ void App::mark_preview_dirty() {
     preview_graphs_dirty = true;
 }
 
+void App::clear_bpm_tap_history(NodeId id) {
+    bpm_tap_history_seconds.erase(id);
+}
+
+void App::tap_bpm(Node& node) {
+    if (!node.type || node.type->name != "BPMTap") {
+        return;
+    }
+
+    auto& tap_times = bpm_tap_history_seconds[node.id];
+    const double now_seconds = ImGui::GetTime();
+    if (!tap_times.empty() && (now_seconds - tap_times.back()) > 2.5) {
+        tap_times.clear();
+    }
+
+    tap_times.push_back(now_seconds);
+    while (tap_times.size() > 5) {
+        tap_times.pop_front();
+    }
+
+    if (tap_times.size() < 2) {
+        return;
+    }
+
+    double interval_sum = 0.0;
+    std::size_t interval_count = 0;
+    for (std::size_t i = 1; i < tap_times.size(); ++i) {
+        const double interval = tap_times[i] - tap_times[i - 1];
+        if (interval < 0.2 || interval > 3.0) {
+            continue;
+        }
+        interval_sum += interval;
+        ++interval_count;
+    }
+
+    if (interval_count == 0) {
+        return;
+    }
+
+    const float bpm = std::clamp((float)(60.0 / (interval_sum / (double)interval_count)),
+                                 20.0f, 300.0f);
+    node.state["bpm"] = SocketValue{Scalar{bpm}};
+    node.type->evaluate(node, 0.0f, 0.0f, true);
+    mark_preview_dirty();
+}
+
 void App::delete_node(NodeId id) {
     graph.connections.erase(
         std::remove_if(graph.connections.begin(), graph.connections.end(),
@@ -450,6 +501,7 @@ void App::delete_node(NodeId id) {
     if (spatial_fixture_driver_node_id == id) {
         spatial_fixture_driver_node_id = 0;
     }
+    clear_bpm_tap_history(id);
 
     rebuild_graph(graph, &last_graph_error);
     mark_preview_dirty();
@@ -484,6 +536,9 @@ void App::seed_default_spatial_patch() {
     const NodeId frequency_y_id = spawn_node_named("Constant", "Y Frequency");
     const NodeId multiply_y_id = spawn_node_named("Multiply", "Y Offset");
     const NodeId spatial_add_id = spawn_node_named("Add", "Spatial Offset");
+    const NodeId bpm_tap_id = spawn_node_named("BPMTap", "Sweep Tempo");
+    const NodeId beats_per_sweep_id = spawn_node_named("Constant", "Beats Per Sweep");
+    const NodeId sweep_period_id = spawn_node_named("Multiply", "Sweep Period");
     const NodeId phase_id = spawn_node_named("Phase", "Sweep Phase");
     const NodeId time_offset_id = spawn_node_named("TimeOffset", "Phase Offset");
     const NodeId ramp_id = spawn_node_named("Ramp", "Sweep Ramp");
@@ -498,7 +553,8 @@ void App::seed_default_spatial_patch() {
     const NodeId fixture_driver_id = spawn_node_named("SpatialFixtureDriver", "Fixture Driver");
 
     if (!probe_x_id || !probe_y_id || !mirror_x_id || !frequency_y_id ||
-        !multiply_y_id || !spatial_add_id || !phase_id || !time_offset_id ||
+        !multiply_y_id || !spatial_add_id || !bpm_tap_id || !beats_per_sweep_id ||
+        !sweep_period_id || !phase_id || !time_offset_id ||
         !ramp_id || !decay_id || !base_tilt_id || !peak_tilt_id || !tilt_mix_id ||
         !full_intensity_id ||
         !white_id || !red_id || !color_mix_id || !fixture_driver_id) {
@@ -508,9 +564,11 @@ void App::seed_default_spatial_patch() {
     if (Node* frequency_y = graph.find_node(frequency_y_id)) {
         frequency_y->state["value"] = SocketValue{Scalar{0.75f}};
     }
-    if (Node* phase = graph.find_node(phase_id)) {
-        phase->inputs[0].default_value = SocketValue{Scalar{1.8f}};
-        phase->inputs[0].current = SocketValue{Scalar{1.8f}};
+    if (Node* bpm_tap = graph.find_node(bpm_tap_id)) {
+        bpm_tap->state["bpm"] = SocketValue{Scalar{100.0f}};
+    }
+    if (Node* beats_per_sweep = graph.find_node(beats_per_sweep_id)) {
+        beats_per_sweep->state["value"] = SocketValue{Scalar{3.0f}};
     }
     if (Node* decay = graph.find_node(decay_id)) {
         decay->inputs[1].default_value = SocketValue{Scalar{0.28f}};
@@ -537,6 +595,9 @@ void App::seed_default_spatial_patch() {
     if (!try_add_connection(frequency_y_id, 0, multiply_y_id, 1)) return;
     if (!try_add_connection(mirror_x_id, 0, spatial_add_id, 0)) return;
     if (!try_add_connection(multiply_y_id, 0, spatial_add_id, 1)) return;
+    if (!try_add_connection(bpm_tap_id, 1, sweep_period_id, 0)) return;
+    if (!try_add_connection(beats_per_sweep_id, 0, sweep_period_id, 1)) return;
+    if (!try_add_connection(sweep_period_id, 0, phase_id, 0)) return;
     if (!try_add_connection(phase_id, 0, time_offset_id, 0)) return;
     if (!try_add_connection(spatial_add_id, 0, time_offset_id, 1)) return;
     if (!try_add_connection(time_offset_id, 0, ramp_id, 0)) return;
@@ -560,6 +621,7 @@ bool App::reset_default_patch() {
     graph = Graph{};
     next_id = 1;
     next_connection_id = 1;
+    bpm_tap_history_seconds.clear();
     preview_node_id = 0;
     spatial_fixture_driver_node_id = 0;
     preview_output_socket_index = 0;
@@ -921,6 +983,33 @@ void App::draw_node(Node& n) {
     if (ImGui::InputTextMultiline("Comments", comments_buffer.data(), comments_buffer.size(),
                                   ImVec2(-1.0f, ImGui::GetTextLineHeight() * 4.0f))) {
         n.comments = comments_buffer.data();
+    }
+
+    if (n.type && n.type->name == "BPMTap") {
+        const auto tap_history = bpm_tap_history_seconds.find(n.id);
+        const std::size_t tap_count = tap_history != bpm_tap_history_seconds.end()
+            ? tap_history->second.size()
+            : 0;
+        const Scalar bpm = std::get<Scalar>(n.state.at("bpm"));
+        const float period = bpm > 0.0f ? 60.0f / bpm : 0.0f;
+
+        ImGui::Separator();
+        ImGui::Text("Tap Tempo");
+        ImGui::Text("Tempo: %.1f BPM", bpm);
+        ImGui::SameLine();
+        ImGui::TextDisabled("Beat Period: %.3fs", period);
+        if (tap_count < 2) {
+            ImGui::TextDisabled("Tap twice to derive tempo from real intervals.");
+        } else {
+            ImGui::TextDisabled("Averaging %zu recent tap intervals.", tap_count - 1);
+        }
+        if (ImGui::Button("Tap Tempo")) {
+            tap_bpm(n);
+        }
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Clear Taps")) {
+            clear_bpm_tap_history(n.id);
+        }
     }
 
     if (!n.inputs.empty()) {
@@ -1678,6 +1767,8 @@ void App::draw_debug_panel() {
     if (ImGui::Button("Constant"))      spawn_node("Constant");
     ImGui::SameLine();
     if (ImGui::Button("Constant Vec3")) spawn_node("ConstantVec3");
+    ImGui::SameLine();
+    if (ImGui::Button("BPM Tap"))       spawn_node("BPMTap");
     ImGui::SameLine();
     if (ImGui::Button("Phase"))         spawn_node("Phase");
     ImGui::SameLine();

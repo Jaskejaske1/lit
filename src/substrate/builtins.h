@@ -77,6 +77,14 @@ inline void phase_evaluate(Node& self, float dt, float, bool init_pass) {
     self.outputs[0].current = SocketValue{phase};
 }
 
+inline void bpm_tap_evaluate(Node& self, float, float, bool) {
+    Scalar bpm = std::get<Scalar>(self.state.at("bpm"));
+    bpm = std::clamp(bpm, 20.0f, 300.0f);
+    self.state["bpm"] = SocketValue{bpm};
+    self.outputs[0].current = SocketValue{bpm};
+    self.outputs[1].current = SocketValue{60.0f / bpm};
+}
+
 inline void add_evaluate(Node& self, float, float, bool) {
     const Scalar a = std::get<Scalar>(self.inputs[0].current);
     const Scalar b = std::get<Scalar>(self.inputs[1].current);
@@ -213,6 +221,24 @@ inline void register_phase_node_type() {
         "phase", ValueType::Scalar, SocketValue{Scalar{0.0f}}
     });
     t.evaluate = &phase_evaluate;
+    register_node_type(t);
+}
+
+inline void register_bpm_tap_node_type() {
+    NodeType t;
+    t.name         = "BPMTap";
+    t.display_name = "BPM Tap";
+    t.category     = "Generator";
+    t.outputs.push_back(SocketSpec{
+        "BPM", ValueType::Scalar, SocketValue{Scalar{120.0f}}, std::pair{20.0f, 300.0f}
+    });
+    t.outputs.push_back(SocketSpec{
+        "Period", ValueType::Scalar, SocketValue{Scalar{0.5f}}, std::pair{0.2f, 3.0f}
+    });
+    t.state_schema.push_back(StateKeySpec{
+        "bpm", ValueType::Scalar, SocketValue{Scalar{120.0f}}
+    });
+    t.evaluate = &bpm_tap_evaluate;
     register_node_type(t);
 }
 
@@ -489,6 +515,7 @@ inline void register_spatial_fixture_driver_node_type() {
 inline void register_builtin_node_types() {
     register_constant_node_type();
     register_constant_vec3_node_type();
+    register_bpm_tap_node_type();
     register_phase_node_type();
     register_add_node_type();
     register_multiply_node_type();
