@@ -57,7 +57,7 @@ Current prototype baseline:
 - `lit_view` also lets you tweak disconnected input sockets and node state live, so the current prototype is a real substrate workbench rather than a read-only inspector.
 - `lit_view` now includes a minimal connection editor, so you can wire compatible outputs into inputs and exercise the real graph bake rules from inside the prototype UI.
 - `lit_view` now includes a first field-preview panel: it copies the current graph, samples a selected scalar output over a user-controlled 2D `X,Y` domain, and renders the result as a small animated heatmap.
-- On startup, `lit_view` seeds a default patch `ProbeX -> Multiply -> Add(+Phase) -> Sine`, so the prototype begins with visible spatial motion instead of an empty inspector.
+- On startup, `lit_view` seeds a default 2D patch that combines `ProbeX`, `ProbeY`, two frequency constants, `Phase`, and `Sine`, so the prototype begins with visible animated spatial structure instead of an empty inspector.
 
 This is still a prototype baseline, not the real Phase 1 engine. See
 [build quickstart](docs/engineering-patterns.txt) (top of file) for more.

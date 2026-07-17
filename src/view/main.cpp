@@ -331,29 +331,42 @@ bool App::try_add_connection(NodeId source_node_id, std::size_t source_socket_in
 
 void App::seed_default_spatial_patch() {
     const NodeId probe_x_id = spawn_node("ProbeX");
-    const NodeId frequency_id = spawn_node("Constant");
-    const NodeId multiply_id = spawn_node("Multiply");
+    const NodeId probe_y_id = spawn_node("ProbeY");
+    const NodeId frequency_x_id = spawn_node("Constant");
+    const NodeId frequency_y_id = spawn_node("Constant");
+    const NodeId multiply_x_id = spawn_node("Multiply");
+    const NodeId multiply_y_id = spawn_node("Multiply");
+    const NodeId spatial_add_id = spawn_node("Add");
     const NodeId phase_id = spawn_node("Phase");
-    const NodeId add_id = spawn_node("Add");
+    const NodeId animated_add_id = spawn_node("Add");
     const NodeId sine_id = spawn_node("Sine");
 
-    if (!probe_x_id || !frequency_id || !multiply_id || !phase_id || !add_id || !sine_id) {
+    if (!probe_x_id || !probe_y_id || !frequency_x_id || !frequency_y_id ||
+        !multiply_x_id || !multiply_y_id || !spatial_add_id ||
+        !phase_id || !animated_add_id || !sine_id) {
         return;
     }
 
-    if (Node* frequency = graph.find_node(frequency_id)) {
-        frequency->state["value"] = SocketValue{Scalar{4.0f}};
+    if (Node* frequency_x = graph.find_node(frequency_x_id)) {
+        frequency_x->state["value"] = SocketValue{Scalar{4.0f}};
+    }
+    if (Node* frequency_y = graph.find_node(frequency_y_id)) {
+        frequency_y->state["value"] = SocketValue{Scalar{2.5f}};
     }
     if (Node* phase = graph.find_node(phase_id)) {
         phase->inputs[0].default_value = SocketValue{Scalar{3.0f}};
         phase->inputs[0].current = SocketValue{Scalar{3.0f}};
     }
 
-    if (!try_add_connection(probe_x_id, 0, multiply_id, 0)) return;
-    if (!try_add_connection(frequency_id, 0, multiply_id, 1)) return;
-    if (!try_add_connection(multiply_id, 0, add_id, 0)) return;
-    if (!try_add_connection(phase_id, 0, add_id, 1)) return;
-    if (!try_add_connection(add_id, 0, sine_id, 0)) return;
+    if (!try_add_connection(probe_x_id, 0, multiply_x_id, 0)) return;
+    if (!try_add_connection(frequency_x_id, 0, multiply_x_id, 1)) return;
+    if (!try_add_connection(probe_y_id, 0, multiply_y_id, 0)) return;
+    if (!try_add_connection(frequency_y_id, 0, multiply_y_id, 1)) return;
+    if (!try_add_connection(multiply_x_id, 0, spatial_add_id, 0)) return;
+    if (!try_add_connection(multiply_y_id, 0, spatial_add_id, 1)) return;
+    if (!try_add_connection(spatial_add_id, 0, animated_add_id, 0)) return;
+    if (!try_add_connection(phase_id, 0, animated_add_id, 1)) return;
+    if (!try_add_connection(animated_add_id, 0, sine_id, 0)) return;
 
     preview_node_id = sine_id;
     preview_output_socket_index = 0;

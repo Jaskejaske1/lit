@@ -62,6 +62,7 @@ Phase 1 - Real substrate skeleton
   - Registry-backed nodes, graph bake/topo order, init pass, and live ticking are working on NixOS.
   - The current built-in node set now includes `Constant`, `ConstantVec3`, `Phase`, `Add`, `Multiply`, `Sine`, `ProbeX`, and `ProbeY`.
   - `lit_view` can edit disconnected inputs/state, create connections, and preview one scalar output over a sampled 2D `X,Y` grid with explicit user-controlled bounds.
+  - The default seeded patch now combines both `X` and `Y` probes with time modulation, so the first-launch preview is genuinely 2D instead of a single-axis stripe pattern.
   - This is meaningful Builder progress, but it is still below the Phase 1 exit criterion because the preview is 2D, the runtime is not baked, and the test-case effect is not yet the diagonal-bars sweep.
 
 Phase 2 - Packaging (substrate module to Intention)
