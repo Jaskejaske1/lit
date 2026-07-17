@@ -90,6 +90,7 @@ Current prototype baseline:
 - The field preview is no longer locked to `XY@Z`: it can now inspect `XY`, `XZ`, or `YZ` slices, keeps probe dragging in the active plane, and filters the probe overlay to fixtures that actually intersect the current slice.
 - The substrate node library now includes `Project3D`, and the seeded bar sweep patch uses it as its bar-coordinate primitive, so the default graph is ready to react to fixture height/depth edits instead of being structurally capped at `XY` math.
 - The seeded preview rig is now shallowly staged across `Z`, so the default `Bar L*`/`Bar R*` geometry is no longer perfectly flat and the current `XZ`/`YZ` preview paths show real structure on first launch.
+- The active preview slice can now snap directly to the selected probe, which makes it much faster to inspect the exact plane a staged fixture lives on instead of manually dialing the slice coordinate to match.
 
 This is still a prototype baseline, not the real Phase 1 engine. See
 [build quickstart](docs/engineering-patterns.txt) (top of file) for more.

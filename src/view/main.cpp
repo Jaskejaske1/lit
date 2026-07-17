@@ -1630,6 +1630,13 @@ void App::draw_field_preview_panel() {
     if (ImGui::DragFloat(slice_label, &preview_slice, 0.01f)) {
         mark_preview_dirty();
     }
+    if (const PreviewProbe* selected_probe = selected_preview_probe()) {
+        ImGui::SameLine();
+        if (ImGui::Button("Slice To Selected Probe")) {
+            preview_slice = world_axis_value(selected_probe->fixture.position, preview_slice_axis);
+            mark_preview_dirty();
+        }
+    }
 
     if (ImGui::Button("Reset Domain")) {
         preview_u_min = 0.0f;
