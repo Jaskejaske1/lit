@@ -63,6 +63,7 @@ Phase 1 - Real substrate skeleton
   - The current built-in node set now includes `Constant`, `ConstantVec3`, `Phase`, `Add`, `Multiply`, `Sine`, `Mix`, `TimeOffset`, `SpatialMirror`, `Decay`, `ProbeX`, and `ProbeY`.
   - `lit_view` can edit disconnected inputs/state, create connections, and preview one scalar output over a sampled 2D `X,Y` grid with explicit user-controlled bounds.
   - The field preview now keeps one persistent graph state per sampled probe, which makes temporal nodes meaningful across space instead of collapsing them into one shared history.
+  - The preview can now overlay a small default probe layout on top of the heatmap, which is the first concrete step toward the docs' "per-fixture sample points toggleable on top" idea.
   - The default seeded patch now uses symmetry, spatial offset, time offset, and decay, so the first-launch preview is closer to the diagonal-sweep forcing function than a generic oscillator demo.
   - This is meaningful Builder progress, but it is still below the Phase 1 exit criterion because the preview is 2D, the runtime is not baked, and the test-case effect is not yet the diagonal-bars sweep.
 

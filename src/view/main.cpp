@@ -149,9 +149,11 @@ struct App {
     float        preview_x_max = 1.0f;
     float        preview_y_min = 0.0f;
     float        preview_y_max = 1.0f;
+    bool         show_preview_probes = true;
     bool         preview_graphs_dirty = true;
     std::vector<Graph> preview_graphs;
     std::vector<float> preview_samples;
+    std::vector<Vec2> preview_probe_markers;
     std::string  last_graph_error;
     std::optional<NodeId> pending_delete_node_id;
     double       last_tick_time = 0.0;
@@ -164,6 +166,8 @@ struct App {
     void seed_default_spatial_patch();
     Vec2 preview_probe_center() const;
     Vec2 preview_position_for_cell(int x, int y) const;
+    Vec2 preview_position_from_normalized(Vec2 normalized) const;
+    float preview_sample_from_normalized(Vec2 normalized) const;
     bool rebuild_preview_graphs();
     bool refresh_preview_samples();
     std::optional<float> extract_preview_output(const Graph& source_graph) const;
@@ -234,6 +238,19 @@ bool App::init() {
     ImGui::StyleColorsDark();
     ImGui_ImplSDL3_InitForOpenGL(window, gl_context);
     ImGui_ImplOpenGL3_Init("#version 460");
+
+    preview_probe_markers = {
+        Vec2{0.32f, 0.15f},
+        Vec2{0.28f, 0.30f},
+        Vec2{0.24f, 0.45f},
+        Vec2{0.20f, 0.60f},
+        Vec2{0.16f, 0.75f},
+        Vec2{0.68f, 0.15f},
+        Vec2{0.72f, 0.30f},
+        Vec2{0.76f, 0.45f},
+        Vec2{0.80f, 0.60f},
+        Vec2{0.84f, 0.75f},
+    };
 
     // 8. Seed a small moving scalar field so the preview is meaningful immediately.
     seed_default_spatial_patch();
@@ -443,6 +460,25 @@ Vec2 App::preview_position_for_cell(int x, int y) const {
         preview_x_min + fx * (preview_x_max - preview_x_min),
         preview_y_min + fy * (preview_y_max - preview_y_min),
     };
+}
+
+Vec2 App::preview_position_from_normalized(Vec2 normalized) const {
+    return Vec2{
+        preview_x_min + normalized[0] * (preview_x_max - preview_x_min),
+        preview_y_min + normalized[1] * (preview_y_max - preview_y_min),
+    };
+}
+
+float App::preview_sample_from_normalized(Vec2 normalized) const {
+    if (preview_samples.empty()) {
+        return 0.0f;
+    }
+
+    const float fx = std::clamp(normalized[0], 0.0f, 1.0f);
+    const float fy = std::clamp(normalized[1], 0.0f, 1.0f);
+    const int x = std::clamp((int)std::lround(fx * (preview_grid_width - 1)), 0, preview_grid_width - 1);
+    const int y = std::clamp((int)std::lround(fy * (preview_grid_height - 1)), 0, preview_grid_height - 1);
+    return preview_samples[(std::size_t)(y * preview_grid_width + x)];
 }
 
 std::optional<float> App::extract_preview_output(const Graph& source_graph) const {
@@ -820,6 +856,8 @@ void App::draw_field_preview_panel() {
         preview_y_max = 1.0f;
         mark_preview_dirty();
     }
+    ImGui::SameLine();
+    ImGui::Checkbox("Show Probe Overlay", &show_preview_probes);
 
     if (preview_graphs_dirty) {
         if (!rebuild_preview_graphs()) {
@@ -851,6 +889,27 @@ void App::draw_field_preview_panel() {
         }
     }
 
+    if (show_preview_probes) {
+        for (std::size_t i = 0; i < preview_probe_markers.size(); ++i) {
+            const Vec2 normalized = preview_probe_markers[i];
+            const float sample = std::clamp(preview_sample_from_normalized(normalized), 0.0f, 1.0f);
+            const ImVec2 center{
+                origin.x + normalized[0] * ((preview_grid_width - 1) * (cell_size + cell_padding)),
+                origin.y + normalized[1] * ((preview_grid_height - 1) * (cell_size + cell_padding)),
+            };
+            const ImU32 ring_color = ImGui::GetColorU32(ImVec4(1.0f, 1.0f, 1.0f, 0.95f));
+            const ImU32 fill_color = ImGui::GetColorU32(ImVec4(sample, 0.25f + sample * 0.75f, 0.2f, 1.0f));
+            draw_list->AddCircleFilled(center, 5.0f, fill_color);
+            draw_list->AddCircle(center, 7.0f, ring_color, 0, 2.0f);
+
+            char label[32];
+            std::snprintf(label, sizeof(label), "P%zu %.2f", i + 1, sample);
+            draw_list->AddText(ImVec2(center.x + 8.0f, center.y - 8.0f),
+                               ring_color,
+                               label);
+        }
+    }
+
     ImGui::Dummy(ImVec2(
         preview_grid_width * (cell_size + cell_padding),
         preview_grid_height * (cell_size + cell_padding)));
@@ -858,6 +917,9 @@ void App::draw_field_preview_panel() {
     ImGui::Text("Domain: X %.2f..%.2f, Y %.2f..%.2f",
                 preview_x_min, preview_x_max, preview_y_min, preview_y_max);
     ImGui::Text("Inspector probe center: [%.2f, %.2f]", center[0], center[1]);
+    if (show_preview_probes) {
+        ImGui::Text("Probe overlay: %zu sample points shown over the preview field.", preview_probe_markers.size());
+    }
     ImGui::Text("Prototype preview: one persistent graph state per sampled probe.");
 }
 
