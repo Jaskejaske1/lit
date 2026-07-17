@@ -184,11 +184,12 @@ int test_fixture_probe_trait_helpers() {
 
 int test_all_node_types() {
     const auto& all = all_node_types();
-    CHECK(all.size() >= 16);
+    CHECK(all.size() >= 17);
     CHECK(all.count("Constant") == 1);
     CHECK(all.count("ConstantVec3") == 1);
     CHECK(all.count("Mix") == 1);
     CHECK(all.count("MixVec3") == 1);
+    CHECK(all.count("Clamp") == 1);
     CHECK(all.count("TimeOffset") == 1);
     CHECK(all.count("SpatialMirror") == 1);
     CHECK(all.count("Decay") == 1);
@@ -471,11 +472,32 @@ int test_mix_vec3_lerps_between_inputs() {
     return 0;
 }
 
+int test_clamp_node_limits_scalar_range() {
+    const NodeType* clamp = find_node_type("Clamp");
+    CHECK(clamp != nullptr);
+
+    Node n = make_node(*clamp, 68, "Clamp");
+    n.inputs[0].current = SocketValue{Scalar{1.4f}};
+    n.inputs[1].current = SocketValue{Scalar{0.2f}};
+    n.inputs[2].current = SocketValue{Scalar{0.8f}};
+    n.type->evaluate(n, 0.0f, 0.0f, true);
+    CHECK(std::abs(std::get<Scalar>(n.outputs[0].current) - 0.8f) < 0.0001f);
+
+    n.inputs[0].current = SocketValue{Scalar{-0.3f}};
+    n.inputs[1].current = SocketValue{Scalar{0.9f}};
+    n.inputs[2].current = SocketValue{Scalar{0.1f}};
+    n.type->evaluate(n, 0.0f, 0.0f, true);
+    CHECK(std::abs(std::get<Scalar>(n.outputs[0].current) - 0.1f) < 0.0001f);
+
+    PASS("Clamp node constrains scalar values and normalizes inverted bounds");
+    return 0;
+}
+
 int test_spatial_mirror_folds_position_around_center() {
     const NodeType* spatial_mirror = find_node_type("SpatialMirror");
     CHECK(spatial_mirror != nullptr);
 
-    Node n = make_node(*spatial_mirror, 68, "SpatialMirror");
+    Node n = make_node(*spatial_mirror, 69, "SpatialMirror");
     n.inputs[0].current = SocketValue{Scalar{0.25f}};
     n.inputs[1].current = SocketValue{Scalar{0.5f}};
     n.inputs[2].current = SocketValue{Scalar{0.5f}};
@@ -494,7 +516,7 @@ int test_decay_node_holds_peaks_and_decays_over_time() {
     const NodeType* decay = find_node_type("Decay");
     CHECK(decay != nullptr);
 
-    Node n = make_node(*decay, 69, "Decay");
+    Node n = make_node(*decay, 70, "Decay");
     n.inputs[0].current = SocketValue{Scalar{1.0f}};
     n.inputs[1].current = SocketValue{Scalar{0.5f}};
     n.type->evaluate(n, 0.0f, 0.0f, true);
@@ -517,7 +539,7 @@ int test_output_dimmer_clamps_scalar_output() {
     const NodeType* output_dimmer = find_node_type("OutputDimmer");
     CHECK(output_dimmer != nullptr);
 
-    Node n = make_node(*output_dimmer, 70, "OutputDimmer");
+    Node n = make_node(*output_dimmer, 71, "OutputDimmer");
     n.inputs[0].current = SocketValue{Scalar{1.3f}};
     n.type->evaluate(n, 0.0f, 0.0f, true);
     CHECK(std::get<Scalar>(n.outputs[0].current) == 1.0f);
@@ -534,7 +556,7 @@ int test_output_tilt_clamps_scalar_output() {
     const NodeType* output_tilt = find_node_type("OutputTilt");
     CHECK(output_tilt != nullptr);
 
-    Node n = make_node(*output_tilt, 71, "OutputTilt");
+    Node n = make_node(*output_tilt, 72, "OutputTilt");
     n.inputs[0].current = SocketValue{Scalar{1.2f}};
     n.type->evaluate(n, 0.0f, 0.0f, true);
     CHECK(std::get<Scalar>(n.outputs[0].current) == 1.0f);
@@ -551,7 +573,7 @@ int test_spatial_fixture_driver_exposes_coupled_outputs() {
     const NodeType* driver = find_node_type("SpatialFixtureDriver");
     CHECK(driver != nullptr);
 
-    Node n = make_node(*driver, 72, "SpatialFixtureDriver");
+    Node n = make_node(*driver, 73, "SpatialFixtureDriver");
     n.inputs[0].current = SocketValue{Scalar{0.75f}};
     n.inputs[1].current = SocketValue{Scalar{1.4f}};
     n.inputs[2].current = SocketValue{Vec3{1.2f, -0.1f, 0.4f}};
@@ -591,6 +613,7 @@ int main() {
     rc |= test_mix_node_lerps_between_inputs();
     rc |= test_time_offset_wraps_normalized_signal();
     rc |= test_mix_vec3_lerps_between_inputs();
+    rc |= test_clamp_node_limits_scalar_range();
     rc |= test_spatial_mirror_folds_position_around_center();
     rc |= test_decay_node_holds_peaks_and_decays_over_time();
     rc |= test_output_dimmer_clamps_scalar_output();

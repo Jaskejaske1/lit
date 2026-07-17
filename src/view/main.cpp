@@ -1658,6 +1658,8 @@ void App::draw_debug_panel() {
     ImGui::SameLine();
     if (ImGui::Button("Mix Vec3"))      spawn_node("MixVec3");
     ImGui::SameLine();
+    if (ImGui::Button("Clamp"))         spawn_node("Clamp");
+    ImGui::SameLine();
     if (ImGui::Button("Output Dimmer")) spawn_node("OutputDimmer");
     ImGui::SameLine();
     if (ImGui::Button("Output Tilt"))   spawn_node("OutputTilt");

@@ -121,6 +121,16 @@ inline void mix_vec3_evaluate(Node& self, float, float, bool) {
     }};
 }
 
+inline void clamp_evaluate(Node& self, float, float, bool) {
+    const Scalar value = std::get<Scalar>(self.inputs[0].current);
+    Scalar min_value = std::get<Scalar>(self.inputs[1].current);
+    Scalar max_value = std::get<Scalar>(self.inputs[2].current);
+    if (min_value > max_value) {
+        std::swap(min_value, max_value);
+    }
+    self.outputs[0].current = SocketValue{std::clamp(value, min_value, max_value)};
+}
+
 inline void time_offset_evaluate(Node& self, float, float, bool) {
     Scalar value = std::get<Scalar>(self.inputs[0].current);
     value += std::get<Scalar>(self.inputs[1].current);
@@ -314,6 +324,27 @@ inline void register_mix_vec3_node_type() {
     register_node_type(t);
 }
 
+inline void register_clamp_node_type() {
+    NodeType t;
+    t.name         = "Clamp";
+    t.display_name = "Clamp";
+    t.category     = "Modifier";
+    t.inputs.push_back(SocketSpec{
+        "Value", ValueType::Scalar, SocketValue{Scalar{0.0f}}, std::nullopt
+    });
+    t.inputs.push_back(SocketSpec{
+        "Min", ValueType::Scalar, SocketValue{Scalar{0.0f}}, std::nullopt
+    });
+    t.inputs.push_back(SocketSpec{
+        "Max", ValueType::Scalar, SocketValue{Scalar{1.0f}}, std::nullopt
+    });
+    t.outputs.push_back(SocketSpec{
+        "Value", ValueType::Scalar, SocketValue{Scalar{0.0f}}, std::nullopt
+    });
+    t.evaluate = &clamp_evaluate;
+    register_node_type(t);
+}
+
 inline void register_time_offset_node_type() {
     NodeType t;
     t.name         = "TimeOffset";
@@ -442,6 +473,7 @@ inline void register_builtin_node_types() {
     register_probe_y_node_type();
     register_mix_node_type();
     register_mix_vec3_node_type();
+    register_clamp_node_type();
     register_time_offset_node_type();
     register_spatial_mirror_node_type();
     register_decay_node_type();
