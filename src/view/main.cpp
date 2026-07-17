@@ -1004,36 +1004,25 @@ void App::draw_connections_panel() {
     }
 
     std::vector<int> source_nodes;
-    std::vector<int> destination_nodes;
     for (std::size_t i = 0; i < graph.nodes.size(); ++i) {
         if (!graph.nodes[i].outputs.empty()) {
             source_nodes.push_back((int)i);
         }
-        if (!graph.nodes[i].inputs.empty()) {
-            destination_nodes.push_back((int)i);
-        }
     }
 
-    if (source_nodes.empty() || destination_nodes.empty()) {
-        ImGui::TextUnformatted("Need at least one source node with outputs and one destination node with inputs.");
+    if (source_nodes.empty()) {
+        ImGui::TextUnformatted("Need at least one source node with outputs.");
         return;
     }
 
     if (source_node_selection >= (int)source_nodes.size()) {
         source_node_selection = 0;
     }
-    if (destination_node_selection >= (int)destination_nodes.size()) {
-        destination_node_selection = 0;
-    }
 
     Node& source_node = graph.nodes[(std::size_t)source_nodes[(std::size_t)source_node_selection]];
-    Node& destination_node = graph.nodes[(std::size_t)destination_nodes[(std::size_t)destination_node_selection]];
 
     if (source_output_selection >= (int)source_node.outputs.size()) {
         source_output_selection = 0;
-    }
-    if (destination_input_selection >= (int)destination_node.inputs.size()) {
-        destination_input_selection = 0;
     }
 
     if (ImGui::BeginCombo("Source Node", source_node.name.c_str())) {
@@ -1043,6 +1032,8 @@ void App::draw_connections_panel() {
             if (ImGui::Selectable(node.name.c_str(), selected)) {
                 source_node_selection = (int)i;
                 source_output_selection = 0;
+                destination_node_selection = 0;
+                destination_input_selection = 0;
             }
             if (selected) {
                 ImGui::SetItemDefaultFocus();
@@ -1056,6 +1047,8 @@ void App::draw_connections_panel() {
             const bool selected = ((int)i == source_output_selection);
             if (ImGui::Selectable(source_node.outputs[i].name.c_str(), selected)) {
                 source_output_selection = (int)i;
+                destination_node_selection = 0;
+                destination_input_selection = 0;
             }
             if (selected) {
                 ImGui::SetItemDefaultFocus();
@@ -1064,10 +1057,52 @@ void App::draw_connections_panel() {
         ImGui::EndCombo();
     }
 
+    const Socket& source_output = source_node.outputs[(std::size_t)source_output_selection];
+    ImGui::Text("Connection Type: %s", value_type_name(source_output.type));
+
+    auto compatible_inputs_for_node = [&](const Node& node) {
+        std::vector<int> compatible_inputs;
+        compatible_inputs.reserve(node.inputs.size());
+        for (std::size_t i = 0; i < node.inputs.size(); ++i) {
+            if (node.inputs[i].type == source_output.type) {
+                compatible_inputs.push_back((int)i);
+            }
+        }
+        return compatible_inputs;
+    };
+
+    std::vector<int> compatible_destination_nodes;
+    for (std::size_t i = 0; i < graph.nodes.size(); ++i) {
+        if (!compatible_inputs_for_node(graph.nodes[i]).empty()) {
+            compatible_destination_nodes.push_back((int)i);
+        }
+    }
+
+    if (compatible_destination_nodes.empty()) {
+        ImGui::TextUnformatted("No destination inputs accept the selected output type.");
+        return;
+    }
+
+    if (destination_node_selection >= (int)compatible_destination_nodes.size()) {
+        destination_node_selection = 0;
+    }
+
+    Node& destination_node = graph.nodes[(std::size_t)compatible_destination_nodes[(std::size_t)destination_node_selection]];
+    const std::vector<int> compatible_inputs = compatible_inputs_for_node(destination_node);
+
+    if (compatible_inputs.empty()) {
+        ImGui::TextUnformatted("Selected destination node has no compatible inputs.");
+        return;
+    }
+
+    if (destination_input_selection >= (int)compatible_inputs.size()) {
+        destination_input_selection = 0;
+    }
+
     if (ImGui::BeginCombo("Destination Node", destination_node.name.c_str())) {
-        for (std::size_t i = 0; i < destination_nodes.size(); ++i) {
+        for (std::size_t i = 0; i < compatible_destination_nodes.size(); ++i) {
             const bool selected = ((int)i == destination_node_selection);
-            const auto& node = graph.nodes[(std::size_t)destination_nodes[i]];
+            const auto& node = graph.nodes[(std::size_t)compatible_destination_nodes[i]];
             if (ImGui::Selectable(node.name.c_str(), selected)) {
                 destination_node_selection = (int)i;
                 destination_input_selection = 0;
@@ -1079,10 +1114,12 @@ void App::draw_connections_panel() {
         ImGui::EndCombo();
     }
 
-    if (ImGui::BeginCombo("Destination Input", destination_node.inputs[(std::size_t)destination_input_selection].name.c_str())) {
-        for (std::size_t i = 0; i < destination_node.inputs.size(); ++i) {
+    const int selected_destination_input = compatible_inputs[(std::size_t)destination_input_selection];
+    if (ImGui::BeginCombo("Destination Input", destination_node.inputs[(std::size_t)selected_destination_input].name.c_str())) {
+        for (std::size_t i = 0; i < compatible_inputs.size(); ++i) {
             const bool selected = ((int)i == destination_input_selection);
-            if (ImGui::Selectable(destination_node.inputs[i].name.c_str(), selected)) {
+            const int input_index = compatible_inputs[i];
+            if (ImGui::Selectable(destination_node.inputs[(std::size_t)input_index].name.c_str(), selected)) {
                 destination_input_selection = (int)i;
             }
             if (selected) {
@@ -1094,7 +1131,7 @@ void App::draw_connections_panel() {
 
     if (ImGui::Button("Add Connection")) {
         try_add_connection(source_node.id, (std::size_t)source_output_selection,
-                           destination_node.id, (std::size_t)destination_input_selection);
+                           destination_node.id, (std::size_t)selected_destination_input);
     }
 }
 
