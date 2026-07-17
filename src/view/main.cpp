@@ -218,6 +218,7 @@ struct App {
     Vec2 preview_position_for_cell(int x, int y) const;
     Vec3 preview_world_position_from_normalized(Vec2 normalized, float z = 0.0f) const;
     Vec2 preview_normalized_from_world(Vec3 position) const;
+    bool fit_preview_domain_to_probes(float padding_ratio = 0.08f);
     PreviewOutputSample preview_sample_from_world(Vec3 position) const;
     PreviewProbe* find_preview_probe(uint64_t id);
     const PreviewProbe* find_preview_probe(uint64_t id) const;
@@ -692,6 +693,46 @@ Vec2 App::preview_normalized_from_world(Vec3 position) const {
         (position[0] - preview_x_min) / x_span,
         (position[1] - preview_y_min) / y_span,
     };
+}
+
+bool App::fit_preview_domain_to_probes(float padding_ratio) {
+    const PreviewProbe* first_enabled_probe = nullptr;
+    for (const auto& probe : preview_probes) {
+        if (probe.enabled) {
+            first_enabled_probe = &probe;
+            break;
+        }
+    }
+
+    if (!first_enabled_probe) {
+        return false;
+    }
+
+    float min_x = first_enabled_probe->fixture.position[0];
+    float max_x = first_enabled_probe->fixture.position[0];
+    float min_y = first_enabled_probe->fixture.position[1];
+    float max_y = first_enabled_probe->fixture.position[1];
+    for (const auto& probe : preview_probes) {
+        if (!probe.enabled) {
+            continue;
+        }
+        min_x = std::min(min_x, probe.fixture.position[0]);
+        max_x = std::max(max_x, probe.fixture.position[0]);
+        min_y = std::min(min_y, probe.fixture.position[1]);
+        max_y = std::max(max_y, probe.fixture.position[1]);
+    }
+
+    const float x_span = std::max(max_x - min_x, 0.1f);
+    const float y_span = std::max(max_y - min_y, 0.1f);
+    const float x_padding = x_span * std::max(padding_ratio, 0.0f);
+    const float y_padding = y_span * std::max(padding_ratio, 0.0f);
+
+    preview_x_min = min_x - x_padding;
+    preview_x_max = max_x + x_padding;
+    preview_y_min = min_y - y_padding;
+    preview_y_max = max_y + y_padding;
+    mark_preview_dirty();
+    return true;
 }
 
 PreviewOutputSample App::preview_sample_from_world(Vec3 position) const {
@@ -1412,6 +1453,10 @@ void App::draw_field_preview_panel() {
         preview_y_min = 0.0f;
         preview_y_max = 1.0f;
         mark_preview_dirty();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Fit Domain To Probes")) {
+        fit_preview_domain_to_probes();
     }
     ImGui::SameLine();
     ImGui::Checkbox("Show Probe Overlay", &show_preview_probes);
