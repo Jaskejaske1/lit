@@ -60,6 +60,7 @@ Current prototype baseline:
 - `lit_view` now includes a first field-preview panel: each sampled cell owns its own persistent graph state, so temporal nodes can evolve differently across space.
 - The field preview still renders a user-controlled 2D `X,Y` heatmap, but it now does so with time history per probe instead of stateless re-sampling.
 - `lit_view` can now overlay a simple default probe layout on top of that heatmap, which makes the preview feel closer to sampled fixture positions instead of a purely abstract field.
+- Those overlay probes are now explicit named sample points in the workbench, with editable normalized positions and a selected live probe that drives the inspector-side sample position.
 - On startup, `lit_view` now seeds a more effect-like 2D patch built from `ProbeX`, `ProbeY`, `SpatialMirror`, `TimeOffset`, `Sine`, `Decay`, and `Mix`, so the workbench starts closer to the diagonal-sweep ideas in the docs.
 
 This is still a prototype baseline, not the real Phase 1 engine. See
