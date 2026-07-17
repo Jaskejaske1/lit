@@ -67,7 +67,7 @@ Current prototype baseline:
 - `lit_view` now also exposes those sample points as concrete sampled outputs with IDs, positions, and scalar values, and those values now come from exact per-point persistent graph evaluation rather than nearest-cell heatmap lookup.
 - Those workbench sample points now sit on top of a minimal substrate-side `FixtureProbe` + `FixtureTrait` model, and the default bar probes now advertise `Dimmer`, `Tilt`, and `ColorRGB`.
 - The default sweep graph now terminates in a `SpatialFixtureDriver`, so one coupled graph-side fixture bridge publishes dimmer, tilt, and color instead of splitting the baseline patch across separate output nodes.
-- That same baseline patch now mixes white-to-red color per probe from the decay trail, which moves the workbench closer to the docs' red-sweep forcing function instead of a dimmer-only preview.
+- That same baseline patch now keeps dimmer at full intensity, mixes white-to-red color per probe from the decay trail, and drives tilt as a range mix from that same trail signal, which moves the workbench closer to the docs' red-sweep forcing function instead of a dimmer-only preview.
 - The field preview can now target either scalar or `Vec3` outputs directly, and the grid itself renders color when the selected preview output is `Vec3` instead of leaving color trapped in the probe overlay.
 - The seeded diagonal-sweep workbench now opens on the fixture driver's `ColorRGB` output by default, so the first view you get is the red field instead of a hidden scalar channel.
 - The sampled-point inspector now shows the exact per-probe preview sample plus the coupled fixture-driver dimmer/tilt values and `ColorRGB` swatch when that bridge is present.

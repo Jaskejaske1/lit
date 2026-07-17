@@ -488,9 +488,10 @@ void App::seed_default_spatial_patch() {
     const NodeId time_offset_id = spawn_node_named("TimeOffset", "Phase Offset");
     const NodeId sine_id = spawn_node_named("Sine", "Sweep Wave");
     const NodeId decay_id = spawn_node_named("Decay", "Trail Decay");
-    const NodeId background_id = spawn_node_named("Constant", "Base Level");
-    const NodeId peak_id = spawn_node_named("Constant", "Peak Level");
-    const NodeId mix_id = spawn_node_named("Mix", "Dimmer Mix");
+    const NodeId base_tilt_id = spawn_node_named("Constant", "Base Tilt");
+    const NodeId peak_tilt_id = spawn_node_named("Constant", "Peak Tilt");
+    const NodeId tilt_mix_id = spawn_node_named("Mix", "Tilt Mix");
+    const NodeId full_intensity_id = spawn_node_named("Constant", "Full Intensity");
     const NodeId white_id = spawn_node_named("ConstantVec3", "Base White");
     const NodeId red_id = spawn_node_named("ConstantVec3", "Sweep Red");
     const NodeId color_mix_id = spawn_node_named("MixVec3", "Color Mix");
@@ -498,7 +499,8 @@ void App::seed_default_spatial_patch() {
 
     if (!probe_x_id || !probe_y_id || !mirror_x_id || !frequency_y_id ||
         !multiply_y_id || !spatial_add_id || !phase_id || !time_offset_id ||
-        !sine_id || !decay_id || !background_id || !peak_id || !mix_id ||
+        !sine_id || !decay_id || !base_tilt_id || !peak_tilt_id || !tilt_mix_id ||
+        !full_intensity_id ||
         !white_id || !red_id || !color_mix_id || !fixture_driver_id) {
         return;
     }
@@ -514,11 +516,14 @@ void App::seed_default_spatial_patch() {
         decay->inputs[1].default_value = SocketValue{Scalar{0.28f}};
         decay->inputs[1].current = SocketValue{Scalar{0.28f}};
     }
-    if (Node* background = graph.find_node(background_id)) {
-        background->state["value"] = SocketValue{Scalar{0.08f}};
+    if (Node* base_tilt = graph.find_node(base_tilt_id)) {
+        base_tilt->state["value"] = SocketValue{Scalar{0.30f}};
     }
-    if (Node* peak = graph.find_node(peak_id)) {
-        peak->state["value"] = SocketValue{Scalar{1.0f}};
+    if (Node* peak_tilt = graph.find_node(peak_tilt_id)) {
+        peak_tilt->state["value"] = SocketValue{Scalar{0.82f}};
+    }
+    if (Node* full_intensity = graph.find_node(full_intensity_id)) {
+        full_intensity->state["value"] = SocketValue{Scalar{1.0f}};
     }
     if (Node* white = graph.find_node(white_id)) {
         white->state["value"] = SocketValue{Vec3{1.0f, 1.0f, 1.0f}};
@@ -536,14 +541,14 @@ void App::seed_default_spatial_patch() {
     if (!try_add_connection(spatial_add_id, 0, time_offset_id, 1)) return;
     if (!try_add_connection(time_offset_id, 0, sine_id, 0)) return;
     if (!try_add_connection(sine_id, 0, decay_id, 0)) return;
-    if (!try_add_connection(background_id, 0, mix_id, 0)) return;
-    if (!try_add_connection(peak_id, 0, mix_id, 1)) return;
-    if (!try_add_connection(decay_id, 0, mix_id, 2)) return;
+    if (!try_add_connection(base_tilt_id, 0, tilt_mix_id, 0)) return;
+    if (!try_add_connection(peak_tilt_id, 0, tilt_mix_id, 1)) return;
+    if (!try_add_connection(decay_id, 0, tilt_mix_id, 2)) return;
     if (!try_add_connection(white_id, 0, color_mix_id, 0)) return;
     if (!try_add_connection(red_id, 0, color_mix_id, 1)) return;
     if (!try_add_connection(decay_id, 0, color_mix_id, 2)) return;
-    if (!try_add_connection(mix_id, 0, fixture_driver_id, 0)) return;
-    if (!try_add_connection(sine_id, 0, fixture_driver_id, 1)) return;
+    if (!try_add_connection(full_intensity_id, 0, fixture_driver_id, 0)) return;
+    if (!try_add_connection(tilt_mix_id, 0, fixture_driver_id, 1)) return;
     if (!try_add_connection(color_mix_id, 0, fixture_driver_id, 2)) return;
 
     spatial_fixture_driver_node_id = fixture_driver_id;
