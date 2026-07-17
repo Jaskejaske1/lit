@@ -217,9 +217,9 @@ struct App {
                             NodeId destination_node_id, std::size_t destination_socket_index);
     void seed_default_spatial_patch();
     void seed_default_preview_probes();
-    Vec2 preview_probe_center() const;
-    Vec2 live_probe_position() const;
-    Vec2 preview_position_for_cell(int x, int y) const;
+    Vec3 preview_probe_center() const;
+    Vec3 live_probe_position() const;
+    Vec3 preview_position_for_cell(int x, int y) const;
     Vec3 preview_world_position_from_normalized(Vec2 normalized, float z = 0.0f) const;
     Vec2 preview_normalized_from_world(Vec3 position) const;
     bool fit_preview_domain_to_probes(float padding_ratio = 0.08f);
@@ -344,7 +344,7 @@ void App::tick(float dt) {
         }
     }
 
-    const Vec2 previous_probe_position = current_builtin_probe_position();
+    const Vec3 previous_probe_position = current_builtin_probe_position();
     for (int y = 0; y < preview_grid_height; ++y) {
         for (int x = 0; x < preview_grid_width; ++x) {
             const std::size_t index = (std::size_t)(y * preview_grid_width + x);
@@ -365,7 +365,7 @@ void App::tick(float dt) {
         if (!probe || !probe->enabled) {
             continue;
         }
-        set_builtin_probe_position(Vec2{ probe->fixture.position[0], probe->fixture.position[1] });
+        set_builtin_probe_position(probe->fixture.position);
         if (!probe_runtime.graph.tick(dt, &err)) {
             last_graph_error = std::string(graph_build_error_name(err.code));
             fprintf(stderr, "Preview probe graph tick failed: %s\n", last_graph_error.c_str());
@@ -659,27 +659,25 @@ void App::seed_default_preview_probes() {
         : std::optional<uint64_t>{preview_probes.front().fixture.id};
 }
 
-Vec2 App::preview_probe_center() const {
-    return Vec2{
+Vec3 App::preview_probe_center() const {
+    return Vec3{
         preview_x_min + (preview_x_max - preview_x_min) * 0.5f,
         preview_y_min + (preview_y_max - preview_y_min) * 0.5f,
+        0.0f,
     };
 }
 
-Vec2 App::live_probe_position() const {
+Vec3 App::live_probe_position() const {
     if (const PreviewProbe* probe = selected_preview_probe()) {
-        return Vec2{ probe->fixture.position[0], probe->fixture.position[1] };
+        return probe->fixture.position;
     }
     return preview_probe_center();
 }
 
-Vec2 App::preview_position_for_cell(int x, int y) const {
+Vec3 App::preview_position_for_cell(int x, int y) const {
     const float fx = preview_grid_width > 1 ? (float)x / (float)(preview_grid_width - 1) : 0.0f;
     const float fy = preview_grid_height > 1 ? (float)y / (float)(preview_grid_height - 1) : 0.0f;
-    return Vec2{
-        preview_x_min + fx * (preview_x_max - preview_x_min),
-        preview_y_min + fy * (preview_y_max - preview_y_min),
-    };
+    return preview_world_position_from_normalized(Vec2{fx, fy}, 0.0f);
 }
 
 Vec3 App::preview_world_position_from_normalized(Vec2 normalized, float z) const {
@@ -896,7 +894,7 @@ bool App::rebuild_preview_graphs() {
     preview_samples.assign((std::size_t)(preview_grid_width * preview_grid_height), {});
     preview_graphs.reserve((std::size_t)(preview_grid_width * preview_grid_height));
 
-    const Vec2 previous_probe_position = current_builtin_probe_position();
+    const Vec3 previous_probe_position = current_builtin_probe_position();
     GraphBuildError err;
     for (int y = 0; y < preview_grid_height; ++y) {
         for (int x = 0; x < preview_grid_width; ++x) {
@@ -920,7 +918,7 @@ bool App::rebuild_preview_probe_graphs() {
     preview_probe_graphs.clear();
     preview_probe_graphs.reserve(preview_probes.size());
 
-    const Vec2 previous_probe_position = current_builtin_probe_position();
+    const Vec3 previous_probe_position = current_builtin_probe_position();
     GraphBuildError err;
     for (const auto& probe : preview_probes) {
         if (!probe.enabled) {
@@ -931,7 +929,7 @@ bool App::rebuild_preview_probe_graphs() {
         runtime.probe_id = probe.fixture.id;
         runtime.graph = graph;
         runtime.graph.initialized = false;
-        set_builtin_probe_position(Vec2{ probe.fixture.position[0], probe.fixture.position[1] });
+        set_builtin_probe_position(probe.fixture.position);
         if (!runtime.graph.init_pass(&err)) {
             last_graph_error = std::string(graph_build_error_name(err.code));
             fprintf(stderr, "Preview probe graph init failed: %s\n", last_graph_error.c_str());
@@ -1618,7 +1616,7 @@ void App::draw_field_preview_panel() {
             }
         }
     }
-    const Vec2 center = preview_probe_center();
+    const Vec3 center = preview_probe_center();
     const std::optional<ValueType> preview_type = current_preview_output_type();
     float preview_min = 1.0f;
     float preview_max = 0.0f;
@@ -1683,7 +1681,7 @@ void App::draw_field_preview_panel() {
             }
         }
     } else {
-        ImGui::Text("Inspector probe center: [%.2f, %.2f]", center[0], center[1]);
+        ImGui::Text("Inspector probe center: [%.2f, %.2f, %.2f]", center[0], center[1], center[2]);
     }
     if (show_preview_probes) {
         std::size_t enabled_count = 0;
@@ -2007,6 +2005,8 @@ void App::draw_debug_panel() {
     if (ImGui::Button("ProbeX"))        spawn_node("ProbeX");
     ImGui::SameLine();
     if (ImGui::Button("ProbeY"))        spawn_node("ProbeY");
+    ImGui::SameLine();
+    if (ImGui::Button("ProbeZ"))        spawn_node("ProbeZ");
     ImGui::SameLine();
     if (ImGui::Button("Spatial Mirror")) spawn_node("SpatialMirror");
 

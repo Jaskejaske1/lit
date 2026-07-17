@@ -52,7 +52,7 @@ cmake --build cmake-build/linux
 Current prototype baseline:
 
 - `test_substrate` validates the substrate skeleton and registry behavior.
-- `test_substrate` now also validates graph bake/topo order, init pass behavior, cycle rejection, and the built-in `Phase`, `Ramp`, `Multiply`, `Sine`, `ProbeX`, and `ProbeY` nodes.
+- `test_substrate` now also validates graph bake/topo order, init pass behavior, cycle rejection, and the built-in `Phase`, `Ramp`, `Multiply`, `Sine`, `ProbeX`, `ProbeY`, and `ProbeZ` nodes.
 - `test_substrate` now also covers the first test-case-oriented modifiers: `Mix`, `Clamp`, `TimeOffset`, `SpatialMirror`, and `Decay`.
 - `test_substrate` now also covers the minimal fixture/probe helpers that back the Builder-side sample-point model.
 - `test_substrate` now also covers `OutputDimmer` and `OutputTilt`, the first explicit graph-side scalar output primitives for sampled fixtures.
@@ -82,6 +82,7 @@ Current prototype baseline:
 - `lit_view` can now explicitly reset itself back to that diagonal-sweep baseline, and the seeded graph uses named node instances instead of generic type-number labels.
 - `lit_view` now includes a first search-based quick-add path for node insertion, including `Ctrl+K` focus, arrow-key selection, and `Enter` spawn, so the Builder workbench can keep scaling beyond the original fixed spawn button row.
 - The probe overlay is now directly clickable and draws faint guide lines between grouped bar probes, so the preview reads more like a hanging rig sketch and less like disconnected debug dots.
+- Probe positions are now threaded through the substrate as true `Vec3` sample points, and the built-in spatial node set includes `ProbeZ`, so per-probe runtime evaluation can finally respond to fixture height/depth instead of silently collapsing everything onto `X,Y`.
 
 This is still a prototype baseline, not the real Phase 1 engine. See
 [build quickstart](docs/engineering-patterns.txt) (top of file) for more.

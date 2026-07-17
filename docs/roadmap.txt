@@ -60,7 +60,7 @@ Phase 1 - Real substrate skeleton
 - This is the biggest single phase. Substrate + visual field preview + bake is most of the project.
 - Current prototype slice on July 17, 2026:
   - Registry-backed nodes, graph bake/topo order, init pass, and live ticking are working on NixOS.
-  - The current built-in node set now includes `Constant`, `ConstantVec3`, `Phase`, `Ramp`, `Add`, `Multiply`, `Sine`, `Mix`, `Clamp`, `TimeOffset`, `SpatialMirror`, `Decay`, `ProbeX`, and `ProbeY`.
+  - The current built-in node set now includes `Constant`, `ConstantVec3`, `Phase`, `Ramp`, `Add`, `Multiply`, `Sine`, `Mix`, `Clamp`, `TimeOffset`, `SpatialMirror`, `Decay`, `ProbeX`, `ProbeY`, and `ProbeZ`.
   - `lit_view` can edit disconnected inputs/state, create connections, and preview scalar or `Vec3` outputs over a sampled 2D `X,Y` grid with explicit user-controlled bounds.
   - The node inspector now also exposes node renaming, per-node comments, and bypass state directly in the node header, which brings the current workbench closer to the data-model/ideas docs instead of hiding graph identity and intent in code only.
   - The current connection editor now filters out wrong-type sockets, already-occupied inputs, and self-connections up front, so the Builder workbench avoids many guaranteed-invalid wiring attempts before the graph validator even runs.
@@ -84,6 +84,7 @@ Phase 1 - Real substrate skeleton
   - That seeded diagonal-sweep baseline is now an explicit reset action in `lit_view`, and its node instances are named for their effect role instead of only by type.
   - The current Builder surface now includes a first keyboard-driven quick-add path for node insertion, with `Ctrl+K` focus plus filtered arrow-key and `Enter` control, which starts answering the docs' "keyboard shortcut + search box" direction without pretending the full node canvas exists yet.
   - The probe overlay is now directly clickable and draws faint guide lines between grouped bar probes, which makes the current preview read more like the hanging diagonal-bar rig instead of a set of disconnected debug samples.
+  - Builder-side probe positions now flow through the substrate as true `X,Y,Z` sample points, and `ProbeZ` is available as a first-class spatial primitive, so exact per-probe preview/runtime evaluation can finally react to fixture height/depth even though the main field slice is still 2D.
   - This is meaningful Builder progress, but it is still below the Phase 1 exit criterion because the preview is 2D, the runtime is not baked, and the test-case effect is not yet the diagonal-bars sweep.
 
 Phase 2 - Packaging (substrate module to Intention)

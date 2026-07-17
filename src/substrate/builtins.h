@@ -14,13 +14,13 @@
 
 namespace substrate {
 
-inline thread_local Vec2 builtin_probe_position{0.0f, 0.0f};
+inline thread_local Vec3 builtin_probe_position{0.0f, 0.0f, 0.0f};
 
-inline void set_builtin_probe_position(Vec2 position) {
+inline void set_builtin_probe_position(Vec3 position) {
     builtin_probe_position = position;
 }
 
-inline Vec2 current_builtin_probe_position() {
+inline Vec3 current_builtin_probe_position() {
     return builtin_probe_position;
 }
 
@@ -118,6 +118,10 @@ inline void probe_x_evaluate(Node& self, float, float, bool) {
 
 inline void probe_y_evaluate(Node& self, float, float, bool) {
     self.outputs[0].current = SocketValue{builtin_probe_position[1]};
+}
+
+inline void probe_z_evaluate(Node& self, float, float, bool) {
+    self.outputs[0].current = SocketValue{builtin_probe_position[2]};
 }
 
 inline void mix_evaluate(Node& self, float, float, bool) {
@@ -332,6 +336,18 @@ inline void register_probe_y_node_type() {
     register_node_type(t);
 }
 
+inline void register_probe_z_node_type() {
+    NodeType t;
+    t.name         = "ProbeZ";
+    t.display_name = "Probe Z";
+    t.category     = "Spatial";
+    t.outputs.push_back(SocketSpec{
+        "Z", ValueType::Scalar, SocketValue{Scalar{0.0f}}, std::nullopt
+    });
+    t.evaluate = &probe_z_evaluate;
+    register_node_type(t);
+}
+
 inline void register_mix_node_type() {
     NodeType t;
     t.name         = "Mix";
@@ -523,6 +539,7 @@ inline void register_builtin_node_types() {
     register_ramp_node_type();
     register_probe_x_node_type();
     register_probe_y_node_type();
+    register_probe_z_node_type();
     register_mix_node_type();
     register_mix_vec3_node_type();
     register_clamp_node_type();

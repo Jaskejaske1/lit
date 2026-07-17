@@ -184,7 +184,7 @@ int test_fixture_probe_trait_helpers() {
 
 int test_all_node_types() {
     const auto& all = all_node_types();
-    CHECK(all.size() >= 19);
+    CHECK(all.size() >= 20);
     CHECK(all.count("BPMTap") == 1);
     CHECK(all.count("Constant") == 1);
     CHECK(all.count("ConstantVec3") == 1);
@@ -202,6 +202,7 @@ int test_all_node_types() {
     CHECK(all.count("Ramp") == 1);
     CHECK(all.count("ProbeX") == 1);
     CHECK(all.count("ProbeY") == 1);
+    CHECK(all.count("ProbeZ") == 1);
 
     PASS("all_node_types() enumerates registry");
     return 0;
@@ -402,20 +403,25 @@ int test_multiply_node_multiplies_inputs() {
 int test_probe_coordinate_nodes_read_sample_position() {
     const NodeType* probe_x = find_node_type("ProbeX");
     const NodeType* probe_y = find_node_type("ProbeY");
+    const NodeType* probe_z = find_node_type("ProbeZ");
     CHECK(probe_x != nullptr);
     CHECK(probe_y != nullptr);
+    CHECK(probe_z != nullptr);
 
-    set_builtin_probe_position(Vec2{0.25f, 0.75f});
+    set_builtin_probe_position(Vec3{0.25f, 0.75f, 0.5f});
 
     Node x = make_node(*probe_x, 62, "ProbeX");
     Node y = make_node(*probe_y, 63, "ProbeY");
+    Node z = make_node(*probe_z, 64, "ProbeZ");
     x.type->evaluate(x, 0.0f, 0.0f, true);
     y.type->evaluate(y, 0.0f, 0.0f, true);
+    z.type->evaluate(z, 0.0f, 0.0f, true);
 
     CHECK(std::get<Scalar>(x.outputs[0].current) == 0.25f);
     CHECK(std::get<Scalar>(y.outputs[0].current) == 0.75f);
+    CHECK(std::get<Scalar>(z.outputs[0].current) == 0.5f);
 
-    PASS("Probe coordinate nodes read the current sample position");
+    PASS("Probe coordinate nodes read the current sample position in XYZ");
     return 0;
 }
 
