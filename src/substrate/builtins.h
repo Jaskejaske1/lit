@@ -95,6 +95,15 @@ inline void sine_evaluate(Node& self, float, float, bool) {
     self.outputs[0].current = SocketValue{0.5f + 0.5f * std::sin(tau * input)};
 }
 
+inline void ramp_evaluate(Node& self, float, float, bool) {
+    Scalar input = std::get<Scalar>(self.inputs[0].current);
+    input = std::fmod(input, 1.0f);
+    if (input < 0.0f) {
+        input += 1.0f;
+    }
+    self.outputs[0].current = SocketValue{input};
+}
+
 inline void probe_x_evaluate(Node& self, float, float, bool) {
     self.outputs[0].current = SocketValue{builtin_probe_position[0]};
 }
@@ -255,6 +264,21 @@ inline void register_sine_node_type() {
         "Wave", ValueType::Scalar, SocketValue{Scalar{0.5f}}, std::nullopt
     });
     t.evaluate = &sine_evaluate;
+    register_node_type(t);
+}
+
+inline void register_ramp_node_type() {
+    NodeType t;
+    t.name         = "Ramp";
+    t.display_name = "Ramp";
+    t.category     = "Generator";
+    t.inputs.push_back(SocketSpec{
+        "Phase", ValueType::Scalar, SocketValue{Scalar{0.0f}}, std::nullopt
+    });
+    t.outputs.push_back(SocketSpec{
+        "Wave", ValueType::Scalar, SocketValue{Scalar{0.0f}}, std::nullopt
+    });
+    t.evaluate = &ramp_evaluate;
     register_node_type(t);
 }
 
@@ -469,6 +493,7 @@ inline void register_builtin_node_types() {
     register_add_node_type();
     register_multiply_node_type();
     register_sine_node_type();
+    register_ramp_node_type();
     register_probe_x_node_type();
     register_probe_y_node_type();
     register_mix_node_type();

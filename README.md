@@ -52,7 +52,7 @@ cmake --build cmake-build/linux
 Current prototype baseline:
 
 - `test_substrate` validates the substrate skeleton and registry behavior.
-- `test_substrate` now also validates graph bake/topo order, init pass behavior, cycle rejection, and the built-in `Phase`, `Multiply`, `Sine`, `ProbeX`, and `ProbeY` nodes.
+- `test_substrate` now also validates graph bake/topo order, init pass behavior, cycle rejection, and the built-in `Phase`, `Ramp`, `Multiply`, `Sine`, `ProbeX`, and `ProbeY` nodes.
 - `test_substrate` now also covers the first test-case-oriented modifiers: `Mix`, `Clamp`, `TimeOffset`, `SpatialMirror`, and `Decay`.
 - `test_substrate` now also covers the minimal fixture/probe helpers that back the Builder-side sample-point model.
 - `test_substrate` now also covers `OutputDimmer` and `OutputTilt`, the first explicit graph-side scalar output primitives for sampled fixtures.

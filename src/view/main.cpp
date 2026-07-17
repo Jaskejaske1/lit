@@ -1681,6 +1681,8 @@ void App::draw_debug_panel() {
     ImGui::SameLine();
     if (ImGui::Button("Phase"))         spawn_node("Phase");
     ImGui::SameLine();
+    if (ImGui::Button("Ramp"))          spawn_node("Ramp");
+    ImGui::SameLine();
     if (ImGui::Button("Add"))           spawn_node("Add");
     ImGui::SameLine();
     if (ImGui::Button("Multiply"))      spawn_node("Multiply");
