@@ -80,7 +80,7 @@ Current prototype baseline:
 - `lit_view` now includes a first `BPMTap` primitive with manual tap-tempo controls in the node inspector, so tempo is no longer just a hardcoded period hidden inside `Phase`.
 - On startup, `lit_view` now seeds a more effect-like 2D patch built from `BPMTap`, `Phase`, `ProbeX`, `ProbeY`, `SpatialMirror`, `TimeOffset`, `Ramp`, `Decay`, and `Mix`, and it derives sweep period from beat period times a beats-per-sweep constant, so the workbench starts closer to the diagonal-sweep ideas in the docs.
 - `lit_view` can now explicitly reset itself back to that diagonal-sweep baseline, and the seeded graph uses named node instances instead of generic type-number labels.
-- `lit_view` now includes a first search-based quick-add path for node insertion, so the Builder workbench can keep scaling beyond the original fixed spawn button row.
+- `lit_view` now includes a first search-based quick-add path for node insertion, including `Ctrl+K` focus, arrow-key selection, and `Enter` spawn, so the Builder workbench can keep scaling beyond the original fixed spawn button row.
 - The probe overlay is now directly clickable and draws faint guide lines between grouped bar probes, so the preview reads more like a hanging rig sketch and less like disconnected debug dots.
 
 This is still a prototype baseline, not the real Phase 1 engine. See

@@ -188,6 +188,7 @@ struct App {
     int          destination_input_selection = 0;
     char         node_spawn_filter[64] = "";
     int          filtered_spawn_selection = 0;
+    bool         focus_node_spawn_filter = false;
     NodeId       preview_node_id = 0;
     NodeId       spatial_fixture_driver_node_id = 0;
     int          preview_output_socket_index = 0;
@@ -1891,9 +1892,20 @@ void App::draw_debug_panel() {
     // Spawn controls
     ImGui::Separator();
     ImGui::Text("Spawn:");
+    const ImGuiIO& io = ImGui::GetIO();
+    if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
+        io.KeyCtrl &&
+        ImGui::IsKeyPressed(ImGuiKey_K, false)) {
+        focus_node_spawn_filter = true;
+    }
     ImGui::SetNextItemWidth(240.0f);
+    if (focus_node_spawn_filter) {
+        ImGui::SetKeyboardFocusHere();
+        focus_node_spawn_filter = false;
+    }
     ImGui::InputTextWithHint("##NodeSpawnFilter", "Search node types", node_spawn_filter,
                              sizeof(node_spawn_filter));
+    const bool spawn_filter_active = ImGui::IsItemActive();
 
     auto lowercase_copy = [](std::string text) {
         std::transform(text.begin(), text.end(), text.begin(),
@@ -1916,6 +1928,15 @@ void App::draw_debug_panel() {
         if (filtered_spawn_selection >= (int)filtered_spawn_types.size()) {
             filtered_spawn_selection = 0;
         }
+        if (spawn_filter_active) {
+            if (ImGui::IsKeyPressed(ImGuiKey_DownArrow, false)) {
+                filtered_spawn_selection = (filtered_spawn_selection + 1)
+                    % (int)filtered_spawn_types.size();
+            } else if (ImGui::IsKeyPressed(ImGuiKey_UpArrow, false)) {
+                filtered_spawn_selection = (filtered_spawn_selection - 1
+                    + (int)filtered_spawn_types.size()) % (int)filtered_spawn_types.size();
+            }
+        }
         const NodeType* selected_spawn_type =
             filtered_spawn_types[(std::size_t)filtered_spawn_selection];
         if (ImGui::BeginCombo("Quick Add Type", selected_spawn_type->display_name.c_str())) {
@@ -1933,6 +1954,9 @@ void App::draw_debug_panel() {
             ImGui::EndCombo();
         }
         if (ImGui::Button("Add Filtered Type")) {
+            spawn_node(selected_spawn_type->name.c_str());
+        }
+        if (spawn_filter_active && ImGui::IsKeyPressed(ImGuiKey_Enter, false)) {
             spawn_node(selected_spawn_type->name.c_str());
         }
         ImGui::SameLine();
