@@ -84,6 +84,7 @@ Current prototype baseline:
 - The probe overlay is now directly clickable and draws faint guide lines between grouped bar probes, so the preview reads more like a hanging rig sketch and less like disconnected debug dots.
 - Probe positions are now threaded through the substrate as true `Vec3` sample points, and the built-in spatial node set includes `ProbeZ`, so per-probe runtime evaluation can finally respond to fixture height/depth instead of silently collapsing everything onto `X,Y`.
 - The 2D field preview now exposes an explicit `Preview Z` control, so the main heatmap is an `XY` slice at a chosen height/depth instead of being hardwired to the `Z=0` plane.
+- Probe dots on that overlay are now directly draggable in `X/Y`, preserving each probe's `Z`, so the current Builder workbench can sketch and retune the hanging rig layout in the preview itself instead of only through inspector floats.
 
 This is still a prototype baseline, not the real Phase 1 engine. See
 [build quickstart](docs/engineering-patterns.txt) (top of file) for more.

@@ -200,6 +200,7 @@ struct App {
     bool         show_preview_probes = true;
     uint64_t     next_preview_probe_id = 1;
     std::optional<uint64_t> selected_preview_probe_id;
+    std::optional<uint64_t> dragged_preview_probe_id;
     bool         preview_graphs_dirty = true;
     std::vector<Graph> preview_graphs;
     std::vector<PreviewProbeRuntime> preview_probe_graphs;
@@ -1600,10 +1601,11 @@ void App::draw_field_preview_panel() {
     }
 
     ImGui::Dummy(preview_size);
+    const ImGuiIO& io = ImGui::GetIO();
     if (show_preview_probes &&
         ImGui::IsWindowHovered() &&
         ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
-        const ImVec2 mouse = ImGui::GetIO().MousePos;
+        const ImVec2 mouse = io.MousePos;
         if (mouse.x >= origin.x && mouse.x <= (origin.x + preview_size.x) &&
             mouse.y >= origin.y && mouse.y <= (origin.y + preview_size.y)) {
             const ScreenProbeInfo* nearest_probe = nullptr;
@@ -1619,7 +1621,30 @@ void App::draw_field_preview_panel() {
             }
             if (nearest_probe) {
                 selected_preview_probe_id = nearest_probe->probe->fixture.id;
+                dragged_preview_probe_id = nearest_probe->probe->fixture.id;
             }
+        }
+    }
+    if (dragged_preview_probe_id.has_value()) {
+        if (!io.MouseDown[ImGuiMouseButton_Left]) {
+            dragged_preview_probe_id.reset();
+        } else if (PreviewProbe* dragged_probe = find_preview_probe(*dragged_preview_probe_id)) {
+            const float preview_width = std::max(preview_size.x, 1.0f);
+            const float preview_height = std::max(preview_size.y, 1.0f);
+            const float normalized_x = std::clamp((io.MousePos.x - origin.x) / preview_width, 0.0f, 1.0f);
+            const float normalized_y = std::clamp((io.MousePos.y - origin.y) / preview_height, 0.0f, 1.0f);
+            const Vec3 next_position = preview_world_position_from_normalized(
+                Vec2{normalized_x, normalized_y},
+                dragged_probe->fixture.position[2]);
+            const Vec3 previous_position = dragged_probe->fixture.position;
+            const float dx = next_position[0] - previous_position[0];
+            const float dy = next_position[1] - previous_position[1];
+            if ((dx * dx + dy * dy) > 0.00000025f) {
+                dragged_probe->fixture.position = next_position;
+                mark_preview_dirty();
+            }
+        } else {
+            dragged_preview_probe_id.reset();
         }
     }
     const Vec3 center = preview_probe_center();
