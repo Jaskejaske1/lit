@@ -61,6 +61,7 @@ Current prototype baseline:
 - `lit_view` also lets you tweak disconnected input sockets and node state live, so the current prototype is a real substrate workbench rather than a read-only inspector.
 - `lit_view` now includes a minimal connection editor, so you can wire compatible outputs into inputs and exercise the real graph bake rules from inside the prototype UI.
 - That connection editor now filters out wrong-type sockets, already-occupied inputs, and self-connections up front, so the Builder-side graph workflow spends less time on guaranteed-invalid wiring attempts.
+- That same Connections panel now shows the selected source value plus each live connection's transported source/input values, so the Builder workbench has a first concrete slice of "wires carry actual values" observability even before a real node-canvas UI exists.
 - `lit_view` now includes a first field-preview panel: each sampled cell owns its own persistent graph state, so temporal nodes can evolve differently across space.
 - The field preview still renders a user-controlled 2D `X,Y` surface, but it now does so with time history per probe instead of stateless re-sampling.
 - `lit_view` can now overlay a simple default probe layout on top of that heatmap, which makes the preview feel closer to sampled fixture positions instead of a purely abstract field.

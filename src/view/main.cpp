@@ -983,6 +983,12 @@ void App::draw_connections_panel() {
         const auto& connection = graph.connections[i];
         const Node* src_node = graph.find_node(connection.source.node_id);
         const Node* dst_node = graph.find_node(connection.destination.node_id);
+        const Socket* src_output = (src_node && connection.source.socket_index < src_node->outputs.size())
+            ? &src_node->outputs[connection.source.socket_index]
+            : nullptr;
+        const Socket* dst_input = (dst_node && connection.destination.socket_index < dst_node->inputs.size())
+            ? &dst_node->inputs[connection.destination.socket_index]
+            : nullptr;
         const char* src_socket = (src_node && connection.source.socket_index < src_node->outputs.size())
             ? src_node->outputs[connection.source.socket_index].name.c_str()
             : "?";
@@ -997,6 +1003,12 @@ void App::draw_connections_panel() {
                     src_socket,
                     dst_node ? dst_node->name.c_str() : "?",
                     dst_socket);
+        if (src_output && dst_input) {
+            ImGui::TextDisabled("    %s  source=%s  input=%s",
+                                value_type_name(src_output->type),
+                                format_value(src_output->current).c_str(),
+                                format_value(dst_input->current).c_str());
+        }
         ImGui::SameLine();
         if (ImGui::SmallButton("Remove")) {
             graph.connections.erase(graph.connections.begin() + (long)i);
@@ -1064,6 +1076,7 @@ void App::draw_connections_panel() {
 
     const Socket& source_output = source_node.outputs[(std::size_t)source_output_selection];
     ImGui::Text("Connection Type: %s", value_type_name(source_output.type));
+    ImGui::Text("Source Value: %s", format_value(source_output.current).c_str());
 
     auto input_already_connected = [&](NodeId node_id, std::size_t input_index) {
         for (const auto& connection : graph.connections) {
@@ -1147,6 +1160,10 @@ void App::draw_connections_panel() {
         }
         ImGui::EndCombo();
     }
+
+    const Socket& destination_input = destination_node.inputs[(std::size_t)selected_destination_input];
+    ImGui::Text("Destination Current: %s", format_value(destination_input.current).c_str());
+    ImGui::Text("Destination Default: %s", format_value(destination_input.default_value).c_str());
 
     if (ImGui::Button("Add Connection")) {
         try_add_connection(source_node.id, (std::size_t)source_output_selection,

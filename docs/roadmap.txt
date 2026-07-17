@@ -63,6 +63,7 @@ Phase 1 - Real substrate skeleton
   - The current built-in node set now includes `Constant`, `ConstantVec3`, `Phase`, `Add`, `Multiply`, `Sine`, `Mix`, `Clamp`, `TimeOffset`, `SpatialMirror`, `Decay`, `ProbeX`, and `ProbeY`.
   - `lit_view` can edit disconnected inputs/state, create connections, and preview scalar or `Vec3` outputs over a sampled 2D `X,Y` grid with explicit user-controlled bounds.
   - The current connection editor now filters out wrong-type sockets, already-occupied inputs, and self-connections up front, so the Builder workbench avoids many guaranteed-invalid wiring attempts before the graph validator even runs.
+  - That Connections panel now also shows the selected source value and the live transported source/input values for every existing connection, which is the first concrete Builder-side slice of the docs' "wires carry actual values" goal.
   - The field preview now keeps one persistent graph state per sampled probe, which makes temporal nodes meaningful across space instead of collapsing them into one shared history.
   - The preview can now overlay a small default probe layout on top of the heatmap, which is the first concrete step toward the docs' "per-fixture sample points toggleable on top" idea.
   - Those probes are now first-class named sample points with editable world-space positions, and a selected probe now drives the inspector-side live sample position instead of an invisible center fallback.
