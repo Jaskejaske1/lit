@@ -184,7 +184,7 @@ int test_fixture_probe_trait_helpers() {
 
 int test_all_node_types() {
     const auto& all = all_node_types();
-    CHECK(all.size() >= 13);
+    CHECK(all.size() >= 14);
     CHECK(all.count("Constant") == 1);
     CHECK(all.count("ConstantVec3") == 1);
     CHECK(all.count("Mix") == 1);
@@ -192,6 +192,7 @@ int test_all_node_types() {
     CHECK(all.count("SpatialMirror") == 1);
     CHECK(all.count("Decay") == 1);
     CHECK(all.count("OutputDimmer") == 1);
+    CHECK(all.count("OutputTilt") == 1);
     CHECK(all.count("Multiply") == 1);
     CHECK(all.count("Sine") == 1);
     CHECK(all.count("ProbeX") == 1);
@@ -509,6 +510,23 @@ int test_output_dimmer_clamps_scalar_output() {
     return 0;
 }
 
+int test_output_tilt_clamps_scalar_output() {
+    const NodeType* output_tilt = find_node_type("OutputTilt");
+    CHECK(output_tilt != nullptr);
+
+    Node n = make_node(*output_tilt, 70, "OutputTilt");
+    n.inputs[0].current = SocketValue{Scalar{1.2f}};
+    n.type->evaluate(n, 0.0f, 0.0f, true);
+    CHECK(std::get<Scalar>(n.outputs[0].current) == 1.0f);
+
+    n.inputs[0].current = SocketValue{Scalar{-0.1f}};
+    n.type->evaluate(n, 0.0f, 0.0f, true);
+    CHECK(std::get<Scalar>(n.outputs[0].current) == 0.0f);
+
+    PASS("OutputTilt node clamps scalar output into tilt range");
+    return 0;
+}
+
 // ----------------------------------------------------------------------------
 
 int main() {
@@ -535,6 +553,7 @@ int main() {
     rc |= test_spatial_mirror_folds_position_around_center();
     rc |= test_decay_node_holds_peaks_and_decays_over_time();
     rc |= test_output_dimmer_clamps_scalar_output();
+    rc |= test_output_tilt_clamps_scalar_output();
 
     if (rc == 0) {
         std::cout << "\nAll substrate tests passed.\n";

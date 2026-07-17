@@ -149,6 +149,11 @@ inline void output_dimmer_evaluate(Node& self, float, float, bool) {
     self.outputs[0].current = SocketValue{level};
 }
 
+inline void output_tilt_evaluate(Node& self, float, float, bool) {
+    const Scalar tilt = std::clamp(std::get<Scalar>(self.inputs[0].current), 0.0f, 1.0f);
+    self.outputs[0].current = SocketValue{tilt};
+}
+
 inline void register_phase_node_type() {
     NodeType t;
     t.name         = "Phase";
@@ -338,6 +343,21 @@ inline void register_output_dimmer_node_type() {
     register_node_type(t);
 }
 
+inline void register_output_tilt_node_type() {
+    NodeType t;
+    t.name         = "OutputTilt";
+    t.display_name = "Output Tilt";
+    t.category     = "Output";
+    t.inputs.push_back(SocketSpec{
+        "Tilt", ValueType::Scalar, SocketValue{Scalar{0.0f}}, std::pair{0.0f, 1.0f}
+    });
+    t.outputs.push_back(SocketSpec{
+        "Tilt", ValueType::Scalar, SocketValue{Scalar{0.0f}}, std::nullopt
+    });
+    t.evaluate = &output_tilt_evaluate;
+    register_node_type(t);
+}
+
 inline void register_builtin_node_types() {
     register_constant_node_type();
     register_constant_vec3_node_type();
@@ -352,6 +372,7 @@ inline void register_builtin_node_types() {
     register_spatial_mirror_node_type();
     register_decay_node_type();
     register_output_dimmer_node_type();
+    register_output_tilt_node_type();
 }
 
 }  // namespace substrate

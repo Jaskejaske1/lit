@@ -471,10 +471,12 @@ void App::seed_default_spatial_patch() {
     const NodeId peak_id = spawn_node_named("Constant", "Peak Level");
     const NodeId mix_id = spawn_node_named("Mix", "Dimmer Mix");
     const NodeId output_dimmer_id = spawn_node_named("OutputDimmer", "Dimmer Output");
+    const NodeId output_tilt_id = spawn_node_named("OutputTilt", "Tilt Output");
 
     if (!probe_x_id || !probe_y_id || !mirror_x_id || !frequency_y_id ||
         !multiply_y_id || !spatial_add_id || !phase_id || !time_offset_id ||
-        !sine_id || !decay_id || !background_id || !peak_id || !mix_id || !output_dimmer_id) {
+        !sine_id || !decay_id || !background_id || !peak_id || !mix_id ||
+        !output_dimmer_id || !output_tilt_id) {
         return;
     }
 
@@ -509,6 +511,7 @@ void App::seed_default_spatial_patch() {
     if (!try_add_connection(peak_id, 0, mix_id, 1)) return;
     if (!try_add_connection(decay_id, 0, mix_id, 2)) return;
     if (!try_add_connection(mix_id, 0, output_dimmer_id, 0)) return;
+    if (!try_add_connection(sine_id, 0, output_tilt_id, 0)) return;
 
     preview_node_id = output_dimmer_id;
     preview_output_socket_index = 0;
@@ -533,16 +536,16 @@ bool App::reset_default_patch() {
 
 void App::seed_default_preview_probes() {
     preview_probes = {
-        { FixtureProbe{ next_preview_probe_id++, "Bar L1", Vec3{0.32f, 0.15f, 0.0f}, { FixtureTrait::Dimmer } }, true },
-        { FixtureProbe{ next_preview_probe_id++, "Bar L2", Vec3{0.28f, 0.30f, 0.0f}, { FixtureTrait::Dimmer } }, true },
-        { FixtureProbe{ next_preview_probe_id++, "Bar L3", Vec3{0.24f, 0.45f, 0.0f}, { FixtureTrait::Dimmer } }, true },
-        { FixtureProbe{ next_preview_probe_id++, "Bar L4", Vec3{0.20f, 0.60f, 0.0f}, { FixtureTrait::Dimmer } }, true },
-        { FixtureProbe{ next_preview_probe_id++, "Bar L5", Vec3{0.16f, 0.75f, 0.0f}, { FixtureTrait::Dimmer } }, true },
-        { FixtureProbe{ next_preview_probe_id++, "Bar R1", Vec3{0.68f, 0.15f, 0.0f}, { FixtureTrait::Dimmer } }, true },
-        { FixtureProbe{ next_preview_probe_id++, "Bar R2", Vec3{0.72f, 0.30f, 0.0f}, { FixtureTrait::Dimmer } }, true },
-        { FixtureProbe{ next_preview_probe_id++, "Bar R3", Vec3{0.76f, 0.45f, 0.0f}, { FixtureTrait::Dimmer } }, true },
-        { FixtureProbe{ next_preview_probe_id++, "Bar R4", Vec3{0.80f, 0.60f, 0.0f}, { FixtureTrait::Dimmer } }, true },
-        { FixtureProbe{ next_preview_probe_id++, "Bar R5", Vec3{0.84f, 0.75f, 0.0f}, { FixtureTrait::Dimmer } }, true },
+        { FixtureProbe{ next_preview_probe_id++, "Bar L1", Vec3{0.32f, 0.15f, 0.0f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt } }, true },
+        { FixtureProbe{ next_preview_probe_id++, "Bar L2", Vec3{0.28f, 0.30f, 0.0f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt } }, true },
+        { FixtureProbe{ next_preview_probe_id++, "Bar L3", Vec3{0.24f, 0.45f, 0.0f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt } }, true },
+        { FixtureProbe{ next_preview_probe_id++, "Bar L4", Vec3{0.20f, 0.60f, 0.0f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt } }, true },
+        { FixtureProbe{ next_preview_probe_id++, "Bar L5", Vec3{0.16f, 0.75f, 0.0f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt } }, true },
+        { FixtureProbe{ next_preview_probe_id++, "Bar R1", Vec3{0.68f, 0.15f, 0.0f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt } }, true },
+        { FixtureProbe{ next_preview_probe_id++, "Bar R2", Vec3{0.72f, 0.30f, 0.0f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt } }, true },
+        { FixtureProbe{ next_preview_probe_id++, "Bar R3", Vec3{0.76f, 0.45f, 0.0f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt } }, true },
+        { FixtureProbe{ next_preview_probe_id++, "Bar R4", Vec3{0.80f, 0.60f, 0.0f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt } }, true },
+        { FixtureProbe{ next_preview_probe_id++, "Bar R5", Vec3{0.84f, 0.75f, 0.0f}, { FixtureTrait::Dimmer, FixtureTrait::Tilt } }, true },
     };
     selected_preview_probe_id = preview_probes.empty()
         ? std::nullopt
@@ -1348,6 +1351,8 @@ void App::draw_debug_panel() {
     if (ImGui::Button("Mix"))           spawn_node("Mix");
     ImGui::SameLine();
     if (ImGui::Button("Output Dimmer")) spawn_node("OutputDimmer");
+    ImGui::SameLine();
+    if (ImGui::Button("Output Tilt"))   spawn_node("OutputTilt");
     ImGui::SameLine();
     if (ImGui::Button("Sine"))          spawn_node("Sine");
     ImGui::SameLine();
