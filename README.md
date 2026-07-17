@@ -83,6 +83,7 @@ Current prototype baseline:
 - `lit_view` now includes a first search-based quick-add path for node insertion, including `Ctrl+K` focus, arrow-key selection, and `Enter` spawn, so the Builder workbench can keep scaling beyond the original fixed spawn button row.
 - The probe overlay is now directly clickable and draws faint guide lines between grouped bar probes, so the preview reads more like a hanging rig sketch and less like disconnected debug dots.
 - Probe positions are now threaded through the substrate as true `Vec3` sample points, and the built-in spatial node set includes `ProbeZ`, so per-probe runtime evaluation can finally respond to fixture height/depth instead of silently collapsing everything onto `X,Y`.
+- The 2D field preview now exposes an explicit `Preview Z` control, so the main heatmap is an `XY` slice at a chosen height/depth instead of being hardwired to the `Z=0` plane.
 
 This is still a prototype baseline, not the real Phase 1 engine. See
 [build quickstart](docs/engineering-patterns.txt) (top of file) for more.

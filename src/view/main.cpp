@@ -196,6 +196,7 @@ struct App {
     float        preview_x_max = 1.0f;
     float        preview_y_min = 0.0f;
     float        preview_y_max = 1.0f;
+    float        preview_z = 0.0f;
     bool         show_preview_probes = true;
     uint64_t     next_preview_probe_id = 1;
     std::optional<uint64_t> selected_preview_probe_id;
@@ -663,7 +664,7 @@ Vec3 App::preview_probe_center() const {
     return Vec3{
         preview_x_min + (preview_x_max - preview_x_min) * 0.5f,
         preview_y_min + (preview_y_max - preview_y_min) * 0.5f,
-        0.0f,
+        preview_z,
     };
 }
 
@@ -677,7 +678,7 @@ Vec3 App::live_probe_position() const {
 Vec3 App::preview_position_for_cell(int x, int y) const {
     const float fx = preview_grid_width > 1 ? (float)x / (float)(preview_grid_width - 1) : 0.0f;
     const float fy = preview_grid_height > 1 ? (float)y / (float)(preview_grid_height - 1) : 0.0f;
-    return preview_world_position_from_normalized(Vec2{fx, fy}, 0.0f);
+    return preview_world_position_from_normalized(Vec2{fx, fy}, preview_z);
 }
 
 Vec3 App::preview_world_position_from_normalized(Vec2 normalized, float z) const {
@@ -1449,11 +1450,16 @@ void App::draw_field_preview_panel() {
         mark_preview_dirty();
     }
 
+    if (ImGui::DragFloat("Preview Z", &preview_z, 0.01f)) {
+        mark_preview_dirty();
+    }
+
     if (ImGui::Button("Reset Domain")) {
         preview_x_min = 0.0f;
         preview_x_max = 1.0f;
         preview_y_min = 0.0f;
         preview_y_max = 1.0f;
+        preview_z = 0.0f;
         mark_preview_dirty();
     }
     ImGui::SameLine();
@@ -1646,8 +1652,8 @@ void App::draw_field_preview_panel() {
         average_color[1] /= (float)color_count;
         average_color[2] /= (float)color_count;
     }
-    ImGui::Text("Domain: X %.2f..%.2f, Y %.2f..%.2f",
-                preview_x_min, preview_x_max, preview_y_min, preview_y_max);
+    ImGui::Text("Domain: X %.2f..%.2f, Y %.2f..%.2f, Z %.2f",
+                preview_x_min, preview_x_max, preview_y_min, preview_y_max, preview_z);
     ImGui::Text("Preview range: min %.3f  max %.3f  avg %.3f",
                 preview_min, preview_max,
                 preview_count > 0 ? (preview_sum / (float)preview_count) : 0.0f);

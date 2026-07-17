@@ -85,6 +85,7 @@ Phase 1 - Real substrate skeleton
   - The current Builder surface now includes a first keyboard-driven quick-add path for node insertion, with `Ctrl+K` focus plus filtered arrow-key and `Enter` control, which starts answering the docs' "keyboard shortcut + search box" direction without pretending the full node canvas exists yet.
   - The probe overlay is now directly clickable and draws faint guide lines between grouped bar probes, which makes the current preview read more like the hanging diagonal-bar rig instead of a set of disconnected debug samples.
   - Builder-side probe positions now flow through the substrate as true `X,Y,Z` sample points, and `ProbeZ` is available as a first-class spatial primitive, so exact per-probe preview/runtime evaluation can finally react to fixture height/depth even though the main field slice is still 2D.
+  - That 2D field slice now exposes its own `Preview Z` control, so the Builder workbench can inspect `XY` behavior at different heights/depths instead of silently pinning the heatmap to `Z=0`.
   - This is meaningful Builder progress, but it is still below the Phase 1 exit criterion because the preview is 2D, the runtime is not baked, and the test-case effect is not yet the diagonal-bars sweep.
 
 Phase 2 - Packaging (substrate module to Intention)
