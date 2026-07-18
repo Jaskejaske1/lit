@@ -121,3 +121,11 @@ add_executable(experiment_05
     src/experiments/05_connected_sampling/main.cpp
 )
 target_link_libraries(experiment_05 PRIVATE SDL3::SDL3 gl3w_loader)
+
+# ============================================================================
+# Experiment 06 – Diagonal Red Sweep in a Shader
+# ============================================================================
+add_executable(experiment_06
+    src/experiments/06_diagonal_sweep/main.cpp
+)
+target_link_libraries(experiment_06 PRIVATE SDL3::SDL3 gl3w_loader)
