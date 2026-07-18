@@ -1,8 +1,8 @@
-{ pkgs ? import <nixpkgs> {} }:
+{
+  pkgs ? import <nixpkgs> { },
+}:
 
 pkgs.mkShell {
-  # Automatically pulls in every single library, header, and pkg-config file
-  # needed to compile SDL3, OpenGL, and standard C++ graphics apps on Linux.
   inputsFrom = [ pkgs.sdl3 ];
 
   nativeBuildInputs = with pkgs; [
@@ -71,14 +71,10 @@ pkgs.mkShell {
       "$LIT_BUILD_DIR/bin/test_substrate"
     }
 
-    lit_view() {
-      "$LIT_BUILD_DIR/bin/lit_view"
-    }
-
     echo "⚡ lit NixOS dev shell active"
     echo "  project   : $LIT_PROJECT_ROOT"
     echo "  build dir : $LIT_BUILD_DIR"
     echo "  profile   : $LIT_BUILD_PROFILE"
-    echo "  commands  : lit_configure | lit_build | lit_test | lit_view"
+    echo "  commands  : lit_configure | lit_build | lit_test"
   '';
 }
