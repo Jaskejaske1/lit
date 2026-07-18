@@ -92,32 +92,11 @@ Advantages:
 This is the runtime model for Phase 2+.
 
 ------------------------------------------------------------------------
-FixtureData struct layout (std430 SSBO requirement)
+ImGui fixture-grid visualization pattern (deprecated)
 ------------------------------------------------------------------------
-The substrate's fixture representation must be **32-byte aligned** to match
-std430 layout in the GLSL compute shader:
-
-```cpp
-struct alignas(32) FixtureData
-{
-    float x, y;          // 2D position (will extend to 3D + per-pixel)
-    float channels[6];   // [0]=Dimmer, [1]=R, [2]=G, [3]=B, [4]=Pan, [5]=Tilt
-};
-// Total: 32 bytes (8 + 24)
-```
-
-Future extensions (per data-model.txt Spatial Operator + Fixture):
-- **3D position** (x, y, z) → would change total size; keep 32-byte multiple
-- **Per-pixel fixtures** (multiple FixtureData per fixture, indexed) → bigger struct or stride
-- **Real fixture types** (per FixtureData GDTF traits) → much bigger struct
-
-**When extending**: keep total size a multiple of 32 bytes for std430 alignment.
-GLSL std430 layout rules: https://www.khronos.org/opengl/wiki/Interface_Block_(GLSL)#Memory_layout
-
-------------------------------------------------------------------------
-ImGui fixture-grid visualization pattern
-------------------------------------------------------------------------
-For showing the fixture grid in 2D (will be replaced by 3D scene in Phase 1+):
+This pattern was used in the Phase 0 prototype and is retained for historical
+reference only. The current project uses raw OpenGL display (`glBlitFramebuffer`)
+and will adopt a retained‑mode UI for the final busking surface.
 
 ```cpp
 ImDrawList* drawList = ImGui::GetWindowDrawList();
@@ -141,12 +120,6 @@ for (int i = 0; i < fixtures.size(); i++)
 }
 ```
 
-**Channel convention** (from Phase 0): channels[1], [2], [3] = R, G, B.
-Channels[0] = Dimmer (intensity, multiplies color).
-Channels[4], [5] = Pan, Tilt.
-
-Will be replaced by real fixture types when Spatial Operator lands.
-
 ------------------------------------------------------------------------
 What Phase 0 validated (and what it didn't)
 ------------------------------------------------------------------------
@@ -168,3 +141,75 @@ What Phase 0 validated (and what it didn't)
 
 Don't confuse "the toolchain works" with "the system works." Phase 0 proved the
 former. Phase 1+ builds the latter on top.
+
+------------------------------------------------------------------------
+GPU Fixture Output Buffer layout (SSBO)
+------------------------------------------------------------------------
+
+The compute shader writes per‑fixture output into an SSBO. The final layout
+is dynamic (see below), but during Phase 1 shader experiments we use a fixed
+placeholder struct for simplicity.
+
+**Phase 1 placeholder (used in experiments 03–04):**
+
+```cpp
+struct alignas(16) GPUFixureOutput {
+    float   dimmer;          // 0..1
+    float   pad0;            // align pan/tilt to 8‑byte boundary
+    float   pan;             // 0..1 normalized
+    float   tilt;            // 0..1 normalized
+    float   hsl_h;           // 0..1 hue
+    float   hsl_s;           // 0..1 saturation
+    float   hsl_l;           // 0..1 lightness
+    float   pad1;            // align to 16 bytes
+};
+// Total: 48 bytes per fixture, std430 compliant.
+```
+
+**Phase 2 target (dynamic trait‑based layout):**
+
+Each fixture's data is packed into a flat float buffer, indexed by trait.
+A header per fixture gives the count of traits and the offset into the
+packed data array.
+
+Trait index table (matches `FixtureTrait` enum order):
+  0 = Dimmer      (1 float)
+  1 = Pan         (1 float)
+  2 = Tilt        (1 float)
+  3 = Color_HSL   (3 floats: H, S, L)
+  4 = Gobo        (1 float)
+  5 = Iris        (1 float)
+  ... (extensible)
+
+For a fixture with traits [Dimmer, Tilt, Color_HSL]:
+  data[offset+0] = dimmer
+  data[offset+1] = tilt
+  data[offset+2] = hsl_h
+  data[offset+3] = hsl_s
+  data[offset+4] = hsl_l
+
+The CPU profile mapper uses the fixture's trait list to know how many
+floats each trait occupies and where they sit in the packed array.
+
+**Why dynamic:**
+- Fixtures with no pan/tilt don't waste space.
+- Adding a new GDTF trait (gobo, iris, zoom) only extends the trait
+  index table and the CPU mapper; the shader code generator emits the
+  appropriate packing logic per fixture.
+- The substrate's `FixtureProbe::traits` already declares capabilities;
+  the `GraphCompiler` (Phase 2) will use that list to generate the
+  shader packing code automatically.
+
+**Why HSL and not RGB:** the substrate’s working color space is HSL
+(see ideas.txt). Effects manipulate hue, saturation, and lightness directly.
+The CPU profile mapper converts to the fixture’s native color model (RGB,
+RGBW, CMY, etc.) based on its GDTF profile.
+
+**Extensibility for future GDTF traits (gobo, iris, zoom, etc.):**
+- The base `GPUFixureOutput` struct covers the common busking parameters.
+- For effects that need to drive extended traits, a second SSBO with a
+  sparse set of additional floats (indexed by fixture ID) can be added
+  without changing the core hot path.
+- The substrate’s `FixtureProbe::traits` already declares which capabilities
+  a fixture has; the CPU profile mapper uses that information to decide
+  which GPU output fields are valid.
