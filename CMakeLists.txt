@@ -5,6 +5,8 @@ project(lit
     LANGUAGES C CXX
 )
 
+include(FetchContent)
+
 # ============================================================================
 # Configuration
 # ============================================================================
@@ -52,3 +54,62 @@ message(STATUS "  Generator:       ${CMAKE_GENERATOR}")
 message(STATUS "  Substrate:       src/substrate/ (static lib)")
 message(STATUS "  Tests:           test_substrate")
 message(STATUS "")
+
+# ============================================================================
+# Experiment dependencies (SDL3 + GL3W)
+# ============================================================================
+
+# SDL3
+set(SDL_SHARED OFF CACHE BOOL "" FORCE)
+set(SDL_STATIC ON  CACHE BOOL "" FORCE)
+FetchContent_Declare(
+    SDL3
+    GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
+    GIT_TAG        release-3.2.0
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(SDL3)
+
+# GL3W
+FetchContent_Declare(
+    gl3w
+    GIT_REPOSITORY https://github.com/skaslev/gl3w.git
+    GIT_TAG        master
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(gl3w)
+
+add_library(gl3w_loader STATIC ${gl3w_BINARY_DIR}/src/gl3w.c)
+target_link_libraries(gl3w_loader PUBLIC gl3w)
+
+# ============================================================================
+# Experiment 01 – Compute shader sine field
+# ============================================================================
+add_executable(experiment_01
+    src/experiments/01_compute_sine_field/main.cpp
+)
+target_link_libraries(experiment_01 PRIVATE SDL3::SDL3 gl3w_loader)
+
+# ============================================================================
+# Experiment 02 – Fixture sampling from compute shader field
+# ============================================================================
+add_executable(experiment_02
+    src/experiments/02_fixture_sampling/main.cpp
+)
+target_link_libraries(experiment_02 PRIVATE SDL3::SDL3 gl3w_loader)
+
+# ============================================================================
+# Experiment 03 – Multi‑Channel Fixture Output
+# ============================================================================
+add_executable(experiment_03
+    src/experiments/03_multi_channel_output/main.cpp
+)
+target_link_libraries(experiment_03 PRIVATE SDL3::SDL3 gl3w_loader)
+
+# ============================================================================
+# Experiment 04 – Visual Fixture Overlay
+# ============================================================================
+add_executable(experiment_04
+    src/experiments/04_visual_overlay/main.cpp
+)
+target_link_libraries(experiment_04 PRIVATE SDL3::SDL3 gl3w_loader)

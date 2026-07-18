@@ -4,10 +4,11 @@ A node-graph-based lighting control engine. **Surface** for live busking, **Subs
 
 ## Status
 
-- **Phase 0** (toolchain validation) — complete.  
-- **Phase 1** (substrate core) — live.  
-  The node graph engine, type registry, spatial math, and fixture probe model are implemented and tested.  
-- **Phase 2+** (baked shader runtime, visual field preview, busking surface) — future research.
+- **Phase 0** (toolchain validation) — complete.
+- **Phase 1** (shader‑field research) — in progress.
+  - The substrate core (node graph, registry, spatial math, fixture probes) is implemented and tested.
+  - Experiments are validating the “Fixtures as Pixels” concept: GPU compute shaders that generate a spatial field, sample it at fixture positions, and stream results to the CPU. See `src/experiments/`.
+- **Phase 2+** (substrate‑to‑shader compilation, busking surface, DMX output) — future.
 
 ## Docs
 
@@ -27,7 +28,17 @@ lit_build
 lit_test
 ```
 
-The only binary produced is `test_substrate`, which validates the substrate library.
+This produces:
+- `test_substrate` – validates the substrate library.
+- `experiment_01` – compute shader sine field with GPU display.
+- `experiment_02` – fixture sampling from a compute shader field via SSBO readback.
+
+Run experiments directly from the build directory:
+
+```bash
+./cmake-build/linux/bin/experiment_01
+./cmake-build/linux/bin/experiment_02
+```
 
 Useful overrides:
 
