@@ -71,6 +71,27 @@ Pattern is a baseline. The real substrate (Phase 1+) will likely evolve this:
 - Streaming readback for large fixture counts (avoid full-buffer memcpy)
 
 ------------------------------------------------------------------------
+Compute shader as spatial field (Fixtures as Pixels)
+------------------------------------------------------------------------
+Instead of computing per‑fixture values on the CPU and uploading them, render the
+entire effect into a 2D texture via a compute shader. Each fixture then samples
+the texture at its (u,v) coordinate.
+
+Pattern:
+1. Define a 2D texture (e.g., 1024x1024) representing the stage.
+2. Run a compute shader that writes color/intensity to each texel based on time,
+   BPM, and spatial coordinates.
+3. For each fixture, sample the texture at its normalized stage position using
+   `texelFetch` or `texture`. The result is the fixture's output.
+
+Advantages:
+- Constant per‑fixture cost: one texture lookup, independent of effect complexity.
+- Symmetry, scaling, and rotation are just coordinate transforms in the shader.
+- The same shader works for 4 fixtures or 4000.
+
+This is the runtime model for Phase 2+.
+
+------------------------------------------------------------------------
 FixtureData struct layout (std430 SSBO requirement)
 ------------------------------------------------------------------------
 The substrate's fixture representation must be **32-byte aligned** to match

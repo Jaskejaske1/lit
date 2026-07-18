@@ -40,132 +40,50 @@ This is the build order for the system. Each phase ends in something you can act
 
 Each phase should also mark which program(s) it touches (Builder, Operation, Visualizer).
 
-Phase 0 - Validate the toolchain (DONE)
+Phase 0 – Validate the toolchain (DONE)
 - Status: complete
 - What got built: GPU compute to SSBO to CPU readback to ImGui visualization loop
-- What it proves: the foundation works (window, GL context, GPU math, data roundtrip, viz)
-- What it ISN'T: the system. It's a testing base layer.
-- Note: hardcoded math, single effect, no node graph, no library, no surface, no 3D
+- What it proves: the foundation works (window, GL context, GPU math, data roundtrip)
+- The UI prototypes (`lit_view`, `lit_playground`) have been archived. They served their purpose.
 
-Phase 1 - Real substrate skeleton
-- Exit criterion: one real effect built inside the substrate, baked into a module, running at zero-latency, visible in 3D
+Phase 1 – Shader‑field research (current)
+- Exit criterion: a self‑contained C++ program that runs a GLSL compute shader
+  producing a moving scalar/color field, samples it at virtual fixture positions,
+  and displays the result in a window. No node graph, no UI toolkit—just raw
+  OpenGL + SDL3.
+- Why: prove that the “Fixtures as Pixels” concept works at all, before we build
+  tooling around it. This is the foundation for everything else.
 - What gets built:
-  - Real node graph (not hardcoded): Generators (LFO, noise, time, audio FFT later), Modifiers (multiply, clamp, lag, math), Outputs (compute target)
-  - Subpatches: nodes that wrap other nodes
-  - Bake step: graph to optimized runtime form (one of: compiled GLSL compute shader, pre-allocated runtime struct, native C++ function — TBD)
-  - Live data flow visible in the graph itself during build (wires show actual values, not just connections)
-  - Visual field preview (Phase 3 work pulled forward, since you need it to see anything spatial)
-- Bake constraint applies: topology fixed at build-time, runtime only varies parameters
-- Test case: the diagonal pixel bars red sweep + tilt sweep effect, built inside the substrate, baked, running
-- This is the biggest single phase. Substrate + visual field preview + bake is most of the project.
-- Current prototype slice on July 17, 2026:
-  - Registry-backed nodes, graph bake/topo order, init pass, and live ticking are working on NixOS.
-  - The current built-in node set now includes `Constant`, `ConstantVec3`, `Phase`, `Ramp`, `Band`, `Add`, `Multiply`, `Sine`, `Mix`, `Clamp`, `TimeOffset`, `SpatialMirror`, `Decay`, `ProbeX`, `ProbeY`, `ProbeZ`, `Project2D`, and `Project3D`.
-  - `lit_view` can edit disconnected inputs/state, create connections, and preview scalar or `Vec3` outputs over a sampled 2D `X,Y` grid with explicit user-controlled bounds.
-  - The node inspector now also exposes node renaming, per-node comments, and bypass state directly in the node header, which brings the current workbench closer to the data-model/ideas docs instead of hiding graph identity and intent in code only.
-  - The current connection editor now filters out wrong-type sockets, already-occupied inputs, and self-connections up front, so the Builder workbench avoids many guaranteed-invalid wiring attempts before the graph validator even runs.
-  - That Connections panel now also shows the selected source value and the live transported source/input values for every existing connection, which is the first concrete Builder-side slice of the docs' "wires carry actual values" goal.
-  - The field preview now keeps one persistent graph state per sampled probe, which makes temporal nodes meaningful across space instead of collapsing them into one shared history.
-  - The preview can now overlay a small default probe layout on top of the heatmap, which is the first concrete step toward the docs' "per-fixture sample points toggleable on top" idea.
-  - Those probes are now first-class named sample points with editable world-space positions, and a selected probe now drives the inspector-side live sample position instead of an invisible center fallback.
-  - The workbench now also materializes those named points into concrete sampled outputs with IDs, positions, and scalar values, and those values now come from exact per-point persistent graph evaluation instead of nearest-cell heatmap approximation.
-  - Those Builder-side sample points now sit on top of a minimal substrate-side `FixtureProbe` + `FixtureTrait` model, with helper coverage in `test_substrate`.
-  - That same seeded default rig/effect now lives in shared substrate-side demo helpers, and `test_substrate` directly proves that the baseline bar sweep is mirrored left/right, spatially differentiated across the rig, and time-varying instead of treating it as a `lit_view`-only behavior.
-  - The current built-in output set now includes `OutputDimmer`, `OutputTilt`, `MixVec3`, and a minimal `SpatialFixtureDriver`, with helper coverage in `test_substrate`.
-  - The default sweep graph now terminates in `SpatialFixtureDriver`, so one coupled graph-side fixture bridge publishes dimmer, tilt, and color for the sampled-point surface.
-  - The default bar probes now advertise `Dimmer`, `Tilt`, and `ColorRGB`.
-  - The field preview grid can now render those `Vec3` color outputs directly when the selected preview target is color, instead of limiting the main surface to scalar heatmaps.
-  - That seeded diagonal-sweep baseline now opens on the fixture driver's `ColorRGB` output by default, so the first preview reads like the red-sweep test case instead of a hidden scalar channel.
-  - The field preview now also reports lightweight summary stats, including min/max/average intensity and average color for `Vec3` previews, so the current Builder workbench exposes more than just raw cells and probe labels.
-  - The field preview can now fit its visible domain directly to the enabled probe layout, which is the first concrete Builder-side answer to the docs' open axes/scale question.
-  - The starter primitive set now includes a first `BPMTap` node with Builder-side tap-tempo controls, which replaces the old hidden fixed sweep period with an explicit tempo source.
-  - The sampled-point inspector now shows those coupled driver values per probe, including a `ColorRGB` swatch, and the probe overlay now uses fixture-driver color when available.
-  - The default seeded patch now keeps dimmer at full intensity, mixes a white-to-red color trail per probe, and drives tilt as a range mix from that same trail signal, which moves the Builder prototype closer to the red-sweep forcing function in the docs instead of only previewing scalar intensity.
-  - The default seeded patch now uses symmetry, a named `Project3D` bar-coordinate primitive, `BPMTap`, a wrapped `Band` window, time offset, and decay, and it derives the sweep period from beat period times a beats-per-sweep constant, so the first-launch preview is closer to the diagonal-sweep forcing function than a generic oscillator demo.
-  - That seeded diagonal-sweep baseline is now an explicit reset action in `lit_view`, and its node instances are named for their effect role instead of only by type.
-  - The current Builder surface now includes a first keyboard-driven quick-add path for node insertion, with `Ctrl+K` focus plus filtered arrow-key and `Enter` control, which starts answering the docs' "keyboard shortcut + search box" direction without pretending the full node canvas exists yet.
-  - The probe overlay is now directly clickable and draws faint guide lines between grouped bar probes, which makes the current preview read more like the hanging diagonal-bar rig instead of a set of disconnected debug samples.
-  - Builder-side probe positions now flow through the substrate as true `X,Y,Z` sample points, and `ProbeZ` is available as a first-class spatial primitive, so exact per-probe preview/runtime evaluation can finally react to fixture height/depth even though the main field slice is still 2D.
-  - That 2D field slice now exposes its own `Preview Z` control, so the Builder workbench can inspect `XY` behavior at different heights/depths instead of silently pinning the heatmap to `Z=0`.
-  - Those overlay probe dots are now directly draggable in `X/Y` while preserving their stored `Z`, which makes rig-layout iteration happen inside the field preview instead of forcing every position edit through inspector numbers.
-  - The probe editor now also supports mirrored-pair locking and explicit pair sync for the current `Bar L*`/`Bar R*` rig, which makes symmetry-preserving layout edits substantially less manual while the forcing-function test case is still a left/right mirrored bar sweep.
-  - That Builder-side field preview can now switch between `XY`, `XZ`, and `YZ` slices, so the same prototype can inspect height/depth structure directly instead of treating every 3D experiment as a flattened `XY` heatmap; the probe overlay and drag path now follow the active slice as well.
-  - The seeded default sweep now derives its bar coordinate through `Project3D`, so the baseline graph is structurally ready for height/depth-sensitive rig edits instead of staying frozen on an `XY`-only spatial primitive.
-  - That seeded sweep now also runs through a reusable `Band` node before the decay trail, so the baseline reads more like a moving sweep head plus fading tail instead of a broad wrapped phase smear.
-  - The seeded `Bar L*`/`Bar R*` rig now carries a shallow mirrored `Z` profile by default, so the first-launch `XZ` and `YZ` slices are inspecting real staged geometry instead of an all-flat fallback layout.
-  - That slice view can now snap directly to the selected probe's plane, which makes the current staged rig materially easier to inspect without hand-chasing the slice coordinate whenever a fixture sits above or below the current cut.
-  - The selected-probe summary now explicitly compares the probe's exact 3D output against the current heatmap slice sample, so staged fixtures expose their slice-vs-fixture mismatch directly instead of forcing the user to infer it from the heatmap and labels.
-  - The `Sampled Points` pane now also renders as a compact ordered rig table, so the current probe set can be scanned as one structured left/right bar surface with exact sample values and driver outputs instead of a long vertical dump.
-  - That same sampled rig surface now keeps short per-probe preview traces plus larger selected-row preview/dimmer/tilt histories, so the current Builder workbench can read the sweep as motion over time at the exact fixtures instead of only as a single-frame table snapshot.
-  - This is meaningful Builder progress, but it is still below the Phase 1 exit criterion because the preview is 2D, the runtime is not baked, and the test-case effect is not yet the diagonal-bars sweep.
+  - Single‑file experiment: SDL window + compute shader that generates a sine wave
+    field over a 2D grid; read back and display with glDrawPixels or a full‑screen quad.
+  - Extension: define a set of fixture positions (hardcoded), sample the field at
+    those positions, display the sampled colors alongside the field.
+  - Extension: re‑implement the diagonal red sweep entirely in a shader (no substrate)
+    to confirm that complex spatial effects can live on the GPU.
+- Deliverable: a `src/experiments/` directory with numbered, standalone programs.
+- No UI libraries, no node graph runtime. Pure research.
 
-Phase 2 - Packaging (substrate module to Intention)
-- Exit criterion: one Intention saved, loaded, exposed parameters working
+Phase 2 – Substrate‑to‑shader compilation
+- Exit criterion: a substrate `Graph` can be compiled into a GLSL compute shader
+  that produces identical output to the CPU‑side evaluation for a simple effect.
 - What gets built:
-  - Save a node graph as an Intention with metadata (name, tags, exposed parameters)
-  - Load an Intention back into a fresh substrate context
-  - Expose specific parameters from inside the node graph to the outside world
-  - Persistence format (human-readable: JSON or similar)
-- This is what makes "your own library" possible
+  - `GraphCompiler` class that traverses a baked graph and emits GLSL function
+    calls for each node type.
+  - Tests that compare CPU and GPU output for small graphs (Phase→Sine→Output).
+- This is the “bake” step made concrete. It turns the substrate from an interpreted
+  CPU library into a GPU code generator.
 
-Phase 3 - Surface
-- Exit criterion: busking layout running with at least 3 Intentions from your library
-- What gets built:
-  - MA2 layout view / Wolfmix-style pages of executors
-  - Each executor bound to an Intention from your personal library
-  - Live parameter tweaking via the surface
-  - Escape hatch: one keystroke to crack an executor open into its substrate
-  - Library browser (search, tags, categories)
-- Familiar to operators. The feel is: pick an Intention, drop it on an executor, tweak the knobs, react to the band
+Phase 3 – Busking surface (Operation)
+- Exit criterion: a touch‑friendly executable that loads a compiled shader,
+  displays a 3D field preview, and lets you tweak parameters via faders and buttons.
+- UI: retained‑mode, touch‑first (e.g., Qt Quick or Slint), not immediate‑mode.
+- Executor grid, tap‑tempo, master faders, and symmetry controls.
+- This is the live performance binary.
 
-Phase 4 - Real fixture visualizer
-- Exit criterion: GDTF fixture loaded, driven by substrate output, looks right
-- What gets built:
-  - Load GDTF fixture files
-  - Render real fixture models in a 3D scene
-  - Substrate output (the same data the visual field preview shows) drives the real fixtures
-  - Confirms: "what the field preview showed is what this looks like on actual lights"
+Phase 4 – DMX/Art‑Net/sACN output
+- Exit criterion: real fixtures respond to the busking surface.
+- Protocol output layer, per‑universe scheduling, fixture profile mapping.
 
-Phase 5 - DMX/Art-Net/sACN output
-- Exit criterion: real physical fixtures respond to substrate output
-- What gets built:
-  - Industry-standard protocol output
-  - Fixture profile mapping (the bridge from "generic channel values" to "DMX bytes on the wire")
-  - This is the last piece between the substrate and real lights
-- Once this works, the system is end-to-end live with real fixtures
-
-Phase 6 - Polish (backlog, populated by use)
-- Library management at scale (months of building, search, tags, favorites)
-- MIDI / OSC / audio FFT input
-- Fixture profile editor (if GDTF coverage isn't enough)
-- Surface customization per show (Christian-Jackson-level layout view editing)
-- Whatever else surfaces from actually using the system
-
-Open questions blocking Phase 1:
-- Intention data model — what does a packaged substrate module look like on disk?
-- Node graph serialization format
-- Node visual representation (icon, color, parameters inline?)
-- How does the visual field preview know which axes / scale to show?
-- What's the minimum viable node set to build the test case effect?
-
-What we know we can build on:
-- SDL3 + ImGui + GL3W + OpenGL 4.6 toolchain (validated)
-- Modular Node base class (Initialize / Process / DrawUI)
-- Generic FixtureData struct (x, y, channels[6]) — needs extension to 3D, per-pixel, real fixture types
-
-What we know we don't have yet:
-- Node graph editor (visual wiring of nodes)
-- Subpatch mechanism
-- Any persistence layer
-- 3D visualizer
-- Real fixture data / GDTF parsing
-- Surface / busking layout
-- DMX / Art-Net / sACN output
-
-What "done" looks like at each phase:
-- P1: you can sit down at home and BUILD a new effect visually, see it in 3D space
-- P2: that effect is saved and reloadable, with knobs you expose
-- P3: you can take your saved effects and busk with them live
-- P4: you can see exactly what the effects will look like on real fixtures before the show
-- P5: real physical lights move
-- P6: the system feels like yours, not like a tool you tolerate
+Phase 5 – GDTF visualizer and polish
+- Real fixture models in a 3D scene.
+- Library management, MIDI/OSC input, audio FFT.

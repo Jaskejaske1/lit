@@ -6,6 +6,21 @@ The opportunity is programming by intention on a spatial model, not by fixture I
 The dual-state is the architecture: Surface = declarative Intentions, Substrate = procedural node graph, Escape Hatch = one keystroke cracks it open (Ableton + Max-for-Live model)
 4D space (X, Y, Z + T), spatial bounding masks instead of groups, mathematical compositing instead of HTP/LTP
 
+Core concept (2026-07-19): Fixtures as Pixels
+----------------------------------------------
+The stage is a continuous 2D/3D canvas. Effects are not per‑fixture calculations;
+they are shaders that render into a spatial texture. Each fixture samples that
+texture at its world position to get its output values (intensity, color, pan/tilt).
+
+This inverts the traditional model:
+- Old: CPU loops over fixtures, runs node graph per fixture → slow, scales badly.
+- New: GPU renders the effect as a field. Sampling is O(1) per fixture, fully parallel.
+- Symmetry, mirroring, and spatial transforms are just coordinate math in the shader.
+- The substrate node graph becomes an authoring tool that compiles to GLSL at bake time.
+- Live performance = upload uniforms to the shader. No graph evaluation at runtime.
+
+This is the zero‑latency, scalable foundation for a modern busking tool.
+
 The system is four layers, each its own thing, each its own build:
 
 1. Substrate
