@@ -113,3 +113,11 @@ add_executable(experiment_04
     src/experiments/04_visual_overlay/main.cpp
 )
 target_link_libraries(experiment_04 PRIVATE SDL3::SDL3 gl3w_loader)
+
+# ============================================================================
+# Experiment 05 – Connected Field Sampling
+# ============================================================================
+add_executable(experiment_05
+    src/experiments/05_connected_sampling/main.cpp
+)
+target_link_libraries(experiment_05 PRIVATE SDL3::SDL3 gl3w_loader)
