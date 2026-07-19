@@ -1,0 +1,84 @@
+lit — A Field Theory of Lighting
+=================================
+
+Lighting programming should be declarative, not imperative.
+
+Today's consoles are imperative:
+  "Fixture 1 → Pan 45°. Fixture 2 → Cyan. Run effect X. Go."
+
+lit is declarative:
+  "There is a vortex above the drummer.
+   Colour is a function of distance to that vortex.
+   All beams follow the flow.
+   Preserve bilateral symmetry."
+
+The engine decides what every fixture must do to satisfy those declarations.
+
+This is a new paradigm. It rests on three concepts.
+
+1. Space
+--------
+The stage is a continuous 3D coordinate system. Every fixture, every beam,
+every scenic element exists in this space. The engine does not think in
+terms of fixture IDs, DMX addresses, or channel numbers. It thinks in
+terms of positions and orientations in space.
+
+2. Fields
+---------
+A field is a function that answers the question:
+  "What is happening at this point in space, at this moment in time?"
+
+A scalar field returns one value (intensity, zoom, hue).
+A vector field returns a direction or velocity (beam orientation, flow).
+A target field returns a point in space (look‑at target).
+
+Fields can be composed, added, multiplied, masked, and transformed.
+Symmetry is a field operator: it mirrors the field, not the fixtures.
+A sweep is a moving window in a scalar field.
+A circle is a rotating vector field.
+
+Fields are defined by the designer using a visual graph. That graph is a
+mathematical definition of the spatial environment. It does not describe
+what fixtures do; it describes what space does.
+
+3. Entities
+-----------
+A fixture is a probe. It occupies a position in space and has a set of
+capabilities (dimmer, pan/tilt, colour, gobo, etc.).
+
+Every frame, the fixture asks the field engine:
+  "What is the intensity field at my position?"
+  "What is the orientation field at my position?"
+  "What is the colour field at my position?"
+
+The fixture receives generic, semantic answers: a brightness, a direction,
+an HSL colour. It then uses its own profile to convert those answers into
+physical DMX values. A dimmer‑only fixture ignores orientation. An RGBW
+fixture converts HSL to its emitter mix. A moving head solves inverse
+kinematics to point its beam in the requested direction.
+
+The fixture does not know about effects. It only knows about space.
+
+The pipeline
+------------
+  1. Fields are defined and composed (the Builder).
+  2. The field graph is baked into a single continuous function.
+  3. At runtime, the function is evaluated on the GPU — one dispatch
+     produces a spatial texture.
+  4. Every fixture samples the texture at its world position.
+  5. The resulting semantic values are mapped to DMX by fixture profiles.
+  6. Parameters (speed, colour, intensity, symmetry) are live‑tweakable
+     with zero latency — they are just uniforms to the GPU function.
+
+Why this matters
+----------------
+- The rig is replaceable. The field does not change when fixtures change.
+  Add ten more fixtures, and they join the field automatically.
+- Symmetry is a coordinate transform, not a cue‑list duplication.
+- Colour is a spatial property, not a per‑fixture palette choice.
+- Effects are emergent. A "circle" is just a rotating field. A "chase" is
+  a moving wave.
+- The designer composes space, not commands.
+
+lit is not a node‑graph editor, a shader toolkit, or a better MA2.
+It is a field engine for light. The rest is implementation.

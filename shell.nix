@@ -2,6 +2,53 @@
   pkgs ? import <nixpkgs> { },
 }:
 
+let
+  # Create a wrapper around clangd that tells it where GCC's standard library is
+  clangdWrapper = pkgs.writeShellScriptBin "clangd" ''
+    export CPLUS_INCLUDE_PATH="${pkgs.gcc13.cc}/include/c++/${pkgs.gcc13.cc.version}:${pkgs.gcc13.cc}/include/c++/${pkgs.gcc13.cc.version}/x86_64-unknown-linux-gnu''${CPLUS_INCLUDE_PATH:+:$CPLUS_INCLUDE_PATH}"
+    exec ${pkgs.clang-tools}/bin/clangd "$@"
+  '';
+
+  litConfigure = pkgs.writeShellScriptBin "lit_configure" ''
+    set -euo pipefail
+
+    project_root="''${LIT_PROJECT_ROOT:-$PWD}"
+    build_dir="''${LIT_BUILD_DIR:-$project_root/cmake-build/linux}"
+    profile="''${1:-''${LIT_BUILD_PROFILE:-debug}}"
+
+    case "$profile" in
+      debug) build_type=Debug ;;
+      release) build_type=Release ;;
+      *)
+        echo "usage: lit_configure [debug|release]" >&2
+        exit 1
+        ;;
+    esac
+
+    echo "==> Configuring lit ($build_type) in $build_dir"
+    ${pkgs.cmake}/bin/cmake -S "$project_root" -B "$build_dir" -G Ninja \
+      -DCMAKE_BUILD_TYPE="$build_type" \
+      -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+    ln -sf "$build_dir/compile_commands.json" "$project_root/compile_commands.json"
+  '';
+
+  litBuild = pkgs.writeShellScriptBin "lit_build" ''
+    set -euo pipefail
+    build_dir="''${LIT_BUILD_DIR:-$PWD/cmake-build/linux}"
+
+    echo "==> Building lit in $build_dir"
+    ${pkgs.cmake}/bin/cmake --build "$build_dir"
+  '';
+
+  litTest = pkgs.writeShellScriptBin "lit_test" ''
+    set -euo pipefail
+    build_dir="''${LIT_BUILD_DIR:-$PWD/cmake-build/linux}"
+
+    echo "==> Running lit tests"
+    "$build_dir/bin/test_substrate"
+  '';
+in
 pkgs.mkShell {
   inputsFrom = [ pkgs.sdl3 ];
 
@@ -12,6 +59,12 @@ pkgs.mkShell {
     gcc13
     pkg-config
     python3
+
+    clangdWrapper # Use our wrapper instead of raw clang-tools
+
+    litConfigure
+    litBuild
+    litTest
   ];
 
   buildInputs = with pkgs; [
@@ -27,6 +80,9 @@ pkgs.mkShell {
     else
       export LIT_PROJECT_ROOT="$PWD"
     fi
+
+    export LIT_BUILD_PROFILE="debug"
+    export LIT_BUILD_DIR="$LIT_PROJECT_ROOT/cmake-build/linux"
 
     nix_runtime_libs="$(
       printf '%s\n' "$NIX_LDFLAGS" \
@@ -44,37 +100,9 @@ pkgs.mkShell {
       export LD_LIBRARY_PATH="$graphics_libs''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
     fi
 
-    export LIT_BUILD_PROFILE="''${LIT_BUILD_PROFILE:-debug}"
-    export LIT_BUILD_DIR="''${LIT_BUILD_DIR:-$LIT_PROJECT_ROOT/cmake-build/linux}"
-
-    lit_configure() {
-      local profile=''${1:-$LIT_BUILD_PROFILE}
-      local build_type
-
-      case "$profile" in
-        debug) build_type=Debug ;;
-        release) build_type=Release ;;
-        *)
-          echo "usage: lit_configure [debug|release]" >&2
-          return 1
-          ;;
-      esac
-
-      cmake -S "$LIT_PROJECT_ROOT" -B "$LIT_BUILD_DIR" -G Ninja -DCMAKE_BUILD_TYPE="$build_type"
-    }
-
-    lit_build() {
-      cmake --build "$LIT_BUILD_DIR"
-    }
-
-    lit_test() {
-      "$LIT_BUILD_DIR/bin/test_substrate"
-    }
-
-    echo "⚡ lit NixOS dev shell active"
+    echo "⚡ lit NixOS dev environment loaded via direnv"
     echo "  project   : $LIT_PROJECT_ROOT"
     echo "  build dir : $LIT_BUILD_DIR"
-    echo "  profile   : $LIT_BUILD_PROFILE"
     echo "  commands  : lit_configure | lit_build | lit_test"
   '';
 }

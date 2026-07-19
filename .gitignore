@@ -27,4 +27,5 @@ imgui.ini
 *.sln.docstates
 *.db
 
-temp/
+temp/.direnv
+compile_commands.json
