@@ -1,46 +1,126 @@
 # lit
 
-A declarative spatial field engine for stage lighting. Effects are continuous
-functions over 3D space + time. Fixtures sample those fields at their world
-positions and map the results to their own traits.
+A declarative spatial field engine for stage lighting.
 
-A node-graph Substrate is the authoring front-end. GPU compute shaders are the
-runtime. Bake-at-boundary topology, mathematical compositing in 4D space
-(X, Y, Z + T), zero-latency parameter tweaks.
+Lighting should be described as what space does, not as a list of fixture commands. lit models the stage as a continuous 3D field over space and time. Fixtures are probes that sample that field at their world positions and convert the result into their own traits: intensity, color, pan/tilt, beam shape, and so on.
 
-## Status
+This is a field-theory approach to lighting: the designer composes mathematical relationships in space, and the engine resolves the output for any rig that exists in that space.
 
-- **Phase 0** (toolchain validation) — complete.
-- **Phase 1** (shader-field research) — in progress.
-  - The substrate core (node graph, registry, spatial math, fixture probes)
-    is implemented and tested.
-  - Experiments 01–06 validate the “Fixtures as Pixels” concept:
-    GPU compute shaders generate continuous spatial fields, sample them at
-    fixture positions, write structured fixture output to an SSBO, and display
-    the result in a window.
-- **Phase 2+** (substrate-to-shader compilation, busking surface, DMX output)
-  — future.
+## The core idea
 
-## Docs
+### 1. Space
 
-- **[`docs/manifesto.txt`](docs/manifesto.txt)** — The field-theory vision.
-- **[`docs/ideas.txt`](docs/ideas.txt)** — Design decisions, architecture, inspirations.
-- **[`docs/data-model.txt`](docs/data-model.txt)** — Data structures and engine rules.
-- **[`docs/roadmap.txt`](docs/roadmap.txt)** — Build phases with exit criteria.
-- **[`docs/engineering-patterns.txt`](docs/engineering-patterns.txt)** — Performance patterns.
+The stage is a continuous coordinate system. Fixtures, beams, and scenic elements live in that same space. The engine thinks in positions and orientations, not in DMX addresses or fixture IDs.
 
-## Build
+### 2. Fields
+
+A field is a function that answers: “What is happening at this point in space, at this moment in time?”
+
+- Scalar fields: intensity, zoom, value
+- Vector fields: direction, flow, orientation
+- Target fields: points in space for look-at behavior
+
+These fields can be composed, transformed, mirrored, masked, swept, and mixed mathematically. Symmetry is a field operation, not a cue duplication trick.
+
+### 3. Fixtures as probes
+
+A fixture is not an effect owner. It is a probe in the field.
+
+Every frame, the fixture asks:
+
+- What is the intensity at my position?
+- What is the direction at my position?
+- What is the color at my position?
+
+The engine returns semantic values, and the fixture profile translates those values into the physical output it can actually produce.
+
+## The system model
+
+### Substrate
+
+The Substrate is the authoring layer: a procedural node graph for building field logic. It is the data model and evaluation engine for the underlying math.
+
+- typed sockets and connections
+- graph evaluation in dependency order
+- parameterized live values with zero-latency assumptions
+- build-time topology and runtime parameter tweaks
+
+### Surface
+
+The Surface is the busking layer: the simple, touch-friendly front end used in performance.
+
+- executors and intentions
+- parameter faders and controls
+- fast operator workflow
+- access to the underlying substrate when needed
+
+### Visual field preview
+
+A preview of the field itself, not just a list of fixtures. This makes the spatial math visible before it is mapped into DMX or other protocols.
+
+### Real fixture visualizer
+
+Optional validation using real fixture models. This helps confirm that what the field preview shows is what the rig will actually do.
+
+## Why this matters
+
+- The rig is replaceable. The field remains the same.
+- Symmetry is a coordinate transform, not a duplicated cue.
+- Color and intensity exist as spatial properties, not per-fixture palettes.
+- Effects are emergent: a circle, a chase, or a sweep are just field patterns.
+- The designer composes space, not commands.
+
+## Current status
+
+### Phase 0 — toolchain validation
+
+Complete.
+
+- GPU compute to SSBO to CPU readback flow is working.
+- SDL3 + OpenGL foundations are validated.
+- UI prototypes were archived after their purpose was served.
+
+### Phase 1 — shader-field research
+
+Baseline established through experiments 01–06; ongoing.
+
+These experiments proved that:
+
+- GPU compute shaders can generate continuous fields
+- fixtures can sample those fields at their world positions
+- structured fixture output can be written and read back
+- stateful behaviors such as decay are feasible in GPU data flow
+- the “Fixtures as Pixels” model works end-to-end
+
+Remaining research before Phase 2: true 3D fields, vector/target fields,
+live parameter editing, and composed/runtime field operations.
+
+### Phase 2 — substrate-to-shader compilation
+
+Next.
+
+The goal is to compile a substrate graph into a GLSL compute shader and validate that the GPU output matches the CPU-side evaluation for simple effects.
+
+### Phase 3+ — busking surface and output protocols
+
+Planned.
+
+This includes the live runtime, touch-first surface, and DMX/Art-Net/sACN output layers.
+
+## Build system
+
+The project is organized around CMake and a shared substrate library.
 
 ### Windows
 
-Requires Visual Studio 2026 with the **Desktop development with C++** workload.
+Requires Visual Studio 2026 with the Desktop development with C++ workload.
 
 ```powershell
 cmake --preset windows-debug
 cmake --build --preset windows-debug
 ```
 
-Debug executables land in:
+Executables land in:
 
 ```text
 cmake-build/windows/bin/Debug/
@@ -61,24 +141,25 @@ Executables land in:
 cmake-build/linux/bin/
 ```
 
-Useful overrides:
+## Project layout
 
-```bash
-LIT_BUILD_PROFILE=release nix-shell
-LIT_BUILD_DIR=/tmp/lit-debug nix-shell
-```
+- `src/substrate/` — core node graph and CPU-side substrate logic
+- `src/experiments/` — GPU shader-field experiments
+- `tests/` — validation tests for the substrate
+- `docs/` — design and architecture documents
+- `archive/` — earlier prototype UI work
 
 ## Binaries
 
-- `test_substrate` — validates the substrate library.
-- `experiment_01` — compute shader sine field, GPU display.
-- `experiment_02` — fixture sampling from a compute-shader field via SSBO readback.
-- `experiment_03` — multi-channel fixture output.
-- `experiment_04` — visual fixture overlay.
-- `experiment_05` — connected field sampling.
-- `experiment_06` — diagonal red sweep with stateful GPU decay.
+- `test_substrate` — validates the substrate library
+- `experiment_01` — compute shader sine field
+- `experiment_02` — fixture sampling from a compute-shader field
+- `experiment_03` — multi-channel fixture output
+- `experiment_04` — visual fixture overlay
+- `experiment_05` — connected field sampling
+- `experiment_06` — diagonal red sweep with stateful GPU decay
 
-Run an experiment from its build directory, for example:
+Run an experiment from its build output directory, for example:
 
 Windows:
 
@@ -92,7 +173,20 @@ NixOS:
 ./cmake-build/linux/bin/experiment_06
 ```
 
-## Personal
+## Documentation
 
-Research project. No deadlines, no customers. The kid who used to think in
-lightshows is still here — the programmer is the tool building the door.
+The current design direction is captured here:
+
+- [docs/manifesto.md](docs/manifesto.md) — the field-theory vision
+- [docs/ideas.md](docs/ideas.md) — architecture, inspirations, and constraints
+- [docs/data-model.md](docs/data-model.md) — substrate data structures and rules
+- [docs/roadmap.md](docs/roadmap.md) — build phases and exit criteria
+- [docs/engineering-patterns.md](docs/engineering-patterns.md) — runtime and performance patterns
+
+## Research direction
+
+lit is not a node-graph editor, a shader toolkit, or a replacement for an existing console workflow. It is a research engine for a different model of lighting: declarative, spatial, and field-based.
+
+The goal is not to imitate the current industry model exactly. The goal is to build a tool that treats light as a continuous mathematical environment and lets the rig behave as a system that samples it.
+
+This is a research project with no customer deadlines. The programmer is the tool building the door.
