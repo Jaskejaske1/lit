@@ -1,0 +1,231 @@
+# lit — Engineering Patterns
+
+Performance engineering insights captured from the Phase 0 prototype before it
+was deleted. Reference these when building real substrate code, especially
+anything GPU-adjacent.
+
+These are **HOW patterns**, not **WHAT patterns**.
+
+- WHAT (data structures) → `docs/data-model.md`
+- WHY (design decisions) → `docs/ideas.md`
+- WHEN (phase plan) → `docs/roadmap.md`
+- HOW (engineering patterns like this) → `docs/engineering-patterns.md`
+
+## GPU preference hints (hybrid laptops)
+
+NVIDIA Optimus + AMD PowerXpress force the discrete GPU on hybrid laptops.
+Without these, lighting apps can silently run on the integrated GPU and tank
+performance.
+
+```cpp
+#ifdef _WIN32
+#include <windows.h>
+extern "C"
+{
+    __declspec(dllexport) DWORD NvOptimusEnablement = 1;
+    __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
+}
+#endif
+```
+
+These are **linker-level** hints — they must live in the executable itself, not
+a static library. Put them in `main.cpp` (the binary entry point).
+
+## OpenGL context setup with SDL3
+
+Validated configuration from Phase 0:
+
+- Profile: **CORE** (no legacy/compat)
+- Version: **4.6** (compute shaders, SSBO, indirect draw all available)
+- VSync: **ON** (`SDL_GL_SetSwapInterval(1)`)
+
+```cpp
+SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
+SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 6);
+// ... SDL_CreateWindow with SDL_WINDOW_OPENGL flag ...
+SDL_GL_SetSwapInterval(1); // VSync
+```
+
+Why 4.6: needed for compute shaders (4.3+) and SSBO (4.3+). 4.6 is the latest
+broadly-supported desktop version. Avoids extension soup.
+
+## GPU compute → SSBO → CPU readback pipeline (the hot loop)
+
+The validated pipeline for fixture math on the GPU:
+
+1. **GLSL compute shader** with `layout(local_size_x = 256) in;`
+2. **SSBO** with `layout(std430, binding = 0) buffer`, struct 32-byte aligned
+3. **Update uniforms** each frame (time, parameter changes)
+4. **Dispatch**: `glDispatchCompute(num_workgroups, 1, 1)`
+5. **Memory barrier**: `glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT)` — MANDATORY
+6. **Map for read**: `glMapBufferRange(..., GL_MAP_READ_BIT)`
+7. **memcpy** to CPU-side data
+8. **Unmap**: `glUnmapBuffer(GL_SHADER_STORAGE_BUFFER)`
+
+**Critical:** never read SSBO without the memory barrier in step 5. Race
+condition.
+
+Pattern is a baseline. The substrate-to-shader compiler (Phase 2) will
+formalize this:
+
+- Bake step may compile multiple node graphs into one optimized compute shader
+- Per-Intention SSBO layout based on what that Intention produces
+- Streaming readback for large fixture counts (avoid full-buffer memcpy)
+
+## Compute shader as spatial field (Fixtures as Pixels)
+
+Instead of computing per-fixture values on the CPU and uploading them, render
+the entire effect into a 2D texture via a compute shader. Each fixture then
+samples the texture at its `(u,v)` coordinate.
+
+Pattern:
+
+1. Define a 2D texture (e.g., `1024x1024`) representing the stage.
+2. Run a compute shader that writes color/intensity to each texel based on time,
+   BPM, and spatial coordinates.
+3. For each fixture, sample the texture at its normalized stage position using
+   `texelFetch` or `texture`. The result is the fixture's output.
+
+Advantages:
+
+- Constant per-fixture cost: one texture lookup, independent of effect complexity.
+- Symmetry, scaling, and rotation are just coordinate transforms in the shader.
+- The same shader works for 4 fixtures or 4000.
+
+This is the runtime model for Phase 2+.
+
+## ImGui fixture-grid visualization pattern (deprecated)
+
+This pattern was used in the Phase 0 prototype and is retained for historical
+reference only. The current project uses raw OpenGL display
+(`glBlitFramebuffer`) and will adopt a retained-mode UI for the final busking
+surface.
+
+```cpp
+ImDrawList* drawList = ImGui::GetWindowDrawList();
+ImVec2 origin = ImGui::GetCursorScreenPos();
+float rectSize = 30.0f;
+float padding = 5.0f;
+
+for (int i = 0; i < fixtures.size(); i++)
+{
+    int gridX = i % gridSize;
+    int gridY = i / gridSize;
+    ImVec2 pos1 = ImVec2(origin.x + gridX * (rectSize + padding),
+                         origin.y + gridY * (rectSize + padding));
+    ImVec2 pos2 = ImVec2(pos1.x + rectSize, pos1.y + rectSize);
+    ImU32 color = ImGui::GetColorU32(ImVec4(
+        fixtures[i].channels[1], // R
+        fixtures[i].channels[2], // G
+        fixtures[i].channels[3], // B
+        1.0f));
+    drawList->AddRectFilled(pos1, pos2, color, 4.0f);
+}
+```
+
+## What Phase 0 validated (and what it didn't)
+
+**Validated:**
+
+- Window + OpenGL 4.6 context creation on Windows
+- SDL3 + ImGui + GL3W + OpenGL 4.6 toolchain compiles and runs
+- GPU compute shaders dispatch and produce correct output
+- SSBO readback to CPU is reliable (memory barrier works)
+- ImGui can render fixture-grid visualizations
+
+**Did NOT validate** (these were Phase 1+ work):
+
+- Real node graph (Phase 0 math was hardcoded)
+- Substrate architecture (no graph container, no eval loop)
+- Persistence / serialization
+- Surface / busking UI
+- Real DMX/Art-Net/sACN output
+- Real fixture types (GDTF)
+- 3D spatial preview
+
+Don't confuse "the toolchain works" with "the system works." Phase 0 proved the
+former. Phase 1+ builds the latter on top.
+
+## GPU Fixture Output Buffer layout (SSBO)
+
+The compute shader writes per-fixture output into an SSBO. The final layout is
+dynamic (see below), but during Phase 1 shader experiments we use a fixed
+placeholder struct for simplicity.
+
+### Phase 1 placeholder (used in experiments 03–06)
+
+```cpp
+struct alignas(16) GPUFixureOutput {
+    float   dimmer;          // 0..1
+    float   pad0;            // align pan/tilt to 8-byte boundary
+    float   pan;             // 0..1 normalized
+    float   tilt;            // 0..1 normalized
+    float   hsl_h;           // 0..1 hue
+    float   hsl_s;           // 0..1 saturation
+    float   hsl_l;           // 0..1 lightness
+    float   pad1;            // align to 16 bytes
+};
+// Total: 48 bytes per fixture, std430 compliant.
+```
+
+### Phase 2 target (dynamic trait-based layout)
+
+Each fixture's data is packed into a flat float buffer, indexed by trait. A
+header per fixture gives the count of traits and the offset into the packed data
+array.
+
+Trait index table:
+
+```text
+0 = Dimmer      (1 float)
+1 = Pan         (1 float)
+2 = Tilt        (1 float)
+3 = Color_HSL   (3 floats: H, S, L)
+4 = Gobo        (1 float)
+5 = Iris        (1 float)
+... (extensible)
+```
+
+For a fixture with traits `[Dimmer, Tilt, Color_HSL]`:
+
+```text
+data[offset+0] = dimmer
+data[offset+1] = tilt
+data[offset+2] = hsl_h
+data[offset+3] = hsl_s
+data[offset+4] = hsl_l
+```
+
+The CPU profile mapper uses the fixture's trait list to know how many floats
+each trait occupies and where they sit in the packed array.
+
+**Why dynamic:**
+
+- Fixtures with no pan/tilt don't waste space.
+- Adding a new GDTF trait (gobo, iris, zoom) only extends the trait index table
+  and the CPU mapper; the shader code generator emits the appropriate packing
+  logic per fixture.
+- The substrate's `FixtureProbe::traits` already declares capabilities; the
+  `GraphCompiler` (Phase 2) will use that list to generate the shader packing
+  code automatically.
+
+**Why HSL and not RGB:** the substrate's working color space is HSL
+(see `docs/ideas.md`). Effects manipulate hue, saturation, and lightness
+directly. The CPU profile mapper converts to the fixture's native color model
+(RGB, RGBW, CMY, etc.) based on its GDTF profile.
+
+**Extensibility for future GDTF traits (gobo, iris, zoom, etc.):**
+
+- The base `GPUFixureOutput` struct covers the common busking parameters.
+- For effects that need to drive extended traits, a second SSBO with a sparse
+  set of additional floats (indexed by fixture ID) can be added without changing
+  the core hot path.
+- The substrate's `FixtureProbe::traits` already declares which capabilities a
+  fixture has; the CPU profile mapper uses that information to decide which GPU
+  output fields are valid.
+
+> **Implementation note:** current `FixtureTrait` in `src/substrate/fixture.h`
+> is `{ Dimmer, ColorRGB, Pan, Tilt }`. The dynamic trait table above is the
+> intended future layout. `GraphCompiler` must reconcile `ColorRGB` vs
+> `Color_HSL` and add the remaining GDTF traits.

@@ -1,0 +1,325 @@
+# lit — Data Model
+
+> This document describes the substrate core data types used for authoring
+> and CPU-side graph evaluation. The GPU shader-field runtime and its output
+> buffer layout are covered in `docs/engineering-patterns.md` and the
+> experiments.
+
+## Types to define
+
+- Node
+- Socket (input/output)
+- Parameter
+- Connection
+- Graph
+- Intention
+- Nested Intention / Subpatch
+- Fixture
+- Spatial Operator
+
+## Node
+
+The smallest unit in the substrate. Runs some math, has inputs and outputs,
+has configurable parameters.
+
+Fields:
+
+- **ID** — unique within the graph, how the graph refers to it
+- **Type** — reference into the substrate's flat node-type registry
+  (e.g., `BPM Tap`, `Phase`, `Decay`). Type is CLASSIFICATION: many nodes can
+  share the same Type.
+- **Name** — instance label, shows up in the editor. Name is IDENTITY:
+  distinguishes one specific node from another.
+- **Position** — `(x, y)` where it appears in the visual graph. User drags to
+  position. UI-only, not math.
+- **Inputs[]** — input Sockets (name, data type, default value, current value)
+- **Outputs[]** — output Sockets (name, data type, produced value)
+- **State** — per-node runtime memory, `{ name: value, ... }`. Type declares
+  what state keys it needs (in its registry definition). Node holds the actual
+  values per key. Examples: LFO `{ "phase": 0.5 }`, Decay `{ "prev_value": 0.7 }`.
+- **Bypass** — boolean flag. When true, Node is muted (output = identity /
+  zero). Visual indicator on node + toggle in inspector.
+- **Comments** — free-text documentation. Shown in inspector. Useful for
+  complex graphs where you'll forget why you did something.
+
+Three-layer hierarchy above the Node:
+
+- **Type** — classification in the registry
+- **Name** — instance label for a specific Node in a graph
+- **Preset** — pre-configured variant of a Type with default parameter values,
+  saveable as a reusable starting point
+
+## Node Type Registry
+
+Flat list of node types. No inheritance.
+
+Each entry:
+
+```json
+{
+  "name": "Phase",
+  "display_name": "Phase",
+  "category": "Generator",
+  "inputs": [
+    {
+      "name": "Period",
+      "type": "Float",
+      "default": 2.0,
+      "visible": true
+    }
+  ],
+  "outputs": [
+    {
+      "name": "Phase",
+      "type": "Float"
+    }
+  ],
+  "state_schema": [
+    {
+      "name": "phase",
+      "type": "Float",
+      "default": 0.0
+    }
+  ],
+  "evaluate": "<reference to math function>"
+}
+```
+
+Categories are just UI labels. The type itself doesn't care.
+
+## Socket
+
+A typed data port on a Node. Inputs are parameters with default values;
+outputs are produced values.
+
+Fields:
+
+- **Name** — human-readable label (e.g., `Period`, `Intensity`, `Color`)
+- **Data type** — see Data Types below
+- **Direction** — Input or Output
+- **Default** (Input only) — value used when no connection is present
+- **Current** — live value (default OR connected source's value for Input;
+  produced value for Output)
+- **Range** — optional min/max constraints (for UI slider bounds)
+- **UI hint** — how to render in the visual editor (slider, color picker, etc.)
+
+UI: show current value inline at all times (default when disconnected,
+connected source's value when connected).
+
+## Data Types
+
+The substrate's typed data system. Two fundamental concepts:
+
+- **Stream** — continuous data flow at some rate
+- **Event** — discrete event (no value, just "something happened")
+
+Streams carry structured values. Structure is the only type:
+
+- **Scalar** — 1 numeric value (period, tau, dimmer, tilt, etc.)
+- **Vector2** — 2 numeric values (pan+tilt, X+Y, etc.)
+- **Vector3** — 3 numeric values (color HSL = H+S+L, position XYZ, RGB)
+- **Vector4** — 4 numeric values (RGBA, RGBW)
+- **AudioBuffer** — many values (Future)
+
+Conventions (not types):
+
+- Color is a Vector3 (H, S, L). Position is a Vector3 (X, Y, Z). RGB is a
+  Vector3. Same structure, different interpretation by the consuming node.
+- Earlier attempts at semantic types (`Pulse`, `Color`, `Pose`) were too vague.
+  Structural approach is stricter and matches Max/MSP.
+
+## Engine tick (frame rate)
+
+The substrate's main loop. Runs the math for every Node in the graph at a fixed
+rate, topologically sorted.
+
+- **Default:** 60 Hz.
+- **Per-graph configurable:** 30 / 60 / 120 / 240 Hz (preset choices, not
+  arbitrary — exposing arbitrary rates is a footgun).
+- **Decoupled from output rate.** DMX/Art-Net/sACN output runs at its own
+  protocol-dependent rate (DMX capped at ~44 Hz per universe). Output reads the
+  latest graph output; doesn't have to match graph tick.
+- **Time tracked as float seconds internally.** `elapsed_seconds` accumulator.
+  `dt` (delta time since last tick) is passed to nodes that need it
+  (Decay, Phase, Ramp).
+- **Rate changes are safe** because nothing counts frames — math uses elapsed
+  time, not frame index. Bumping a graph from 60 to 120 Hz doesn't break anything.
+
+## Topological evaluation order
+
+Nodes are evaluated in dependency order each tick: a node's inputs are guaranteed
+to be the outputs of nodes already evaluated this tick.
+
+- **Computed once at bake time.** The topological order stays stable as long as
+  topology doesn't change. Live cost = walking a pre-computed list. Build-time
+  cost = one topo sort over the DAG.
+- **Cycles are forbidden.** A cycle means undefined behavior (chicken-and-egg:
+  which node runs first?). Detected and rejected at build time with a clear error
+  pointing to the offending nodes. No silent failure.
+- **Nested Intentions flatten.** At bake time, the substrate inlines the nested
+  graph into one big DAG. No special runtime handling for nesting — it's just one
+  topo sort over the flattened graph.
+- **Stable order across runs.** Same topology to same evaluation order. State
+  behaves deterministically — important for debugging and for any node that
+  depends on evaluation order (e.g., feedback-adjacent patterns).
+
+Why this matters: by the time the Spatial Fixture Driver evaluates, every
+upstream node (BPM Tap, Phase, Decay, MIX) has already produced its value for
+this tick. One frame in, one coherent result out.
+
+## Initialization (cold start, warm start, init pass)
+
+Every graph needs defined outputs at tick=0. The substrate handles this in three
+layers — no flicker, no arbitrary magic numbers.
+
+- **Type defaults** — every Type declares natural cold-start values for its
+  state fields in `state_schema` (e.g., Phase `state.phase = 0`, Decay
+  `state.prev_value = 0`, BPM Tap `state.bpm = 120`). These are the math's
+  natural starting point, not arbitrary.
+- **Preset overrides** — instantiating a Preset writes per-instance initial
+  values into the Node's state (e.g., a "Sweep Starting Mid-Cycle" Preset sets
+  `state.phase = π/2` for its Phase node). Presets own per-instance defaults;
+  Types own type-level defaults. Both layers needed.
+- **Init pass** — before tick=0, the engine walks the DAG once in topo order and
+  asks each node to produce its initial outputs from current state + initial
+  inputs. Time does NOT advance. Counters do NOT increment. Result: tick=0
+  produces coherent outputs. First live frame is correct.
+- **Warm start across switches** — when the operator switches Intentions
+  mid-show, the outgoing Intention's state is saved and restored as the init
+  state if it returns later. Phase counters continue from where they were.
+  Continuity, not jump.
+
+Why this beats the alternatives:
+
+- "Just use state_schema defaults, skip the init pass" → flicker. Decay outputs
+  0 on tick=0 then snaps to real values on tick=1. Visible.
+- "No defaults, require explicit init" → too rigid. Every Phase node everywhere
+  needs babysitting.
+- "Soft start, ramp from default over N frames" → doesn't fix flicker, just
+  delays it inside a "first second is wrong" zone.
+- "Block output until stable" → first N frames produce nothing. Worse than flicker.
+
+The init pass makes "outputs are coherent from frame 1" a property of the
+engine, not a discipline every graph author has to maintain.
+
+## Stream rates and events
+
+Two kinds, defined by the engine tick:
+
+- **Frame-rate** (default) — updates every tick of the substrate's main loop
+  (60 Hz default, per-graph configurable: 30/60/120/240).
+- **Event-rate** — updates only when value changes. For slow-changing data.
+
+Events:
+
+- Discrete events with no value.
+- Fire-and-forget.
+- Used for triggers (beat, button press, threshold crossed).
+
+## Connection rules
+
+Max/MSP-style, loose:
+
+- Same structure — connect (pass through)
+- Different structure — conversion needed (explicit operator or auto-fill)
+- Stream to Event — threshold detector (value crosses X, fires event)
+- Event to Stream — trigger (e.g., sets value to 1)
+- Math nodes decide what to do with values. The type is structural, not semantic.
+
+## Parameter
+
+Parameters and Sockets are unified. A Parameter is simply an Input Socket viewed
+from the UI perspective.
+
+Rules:
+
+- State — EITHER a constant literal value OR a live connection. Never both.
+- Disconnected — UI shows the literal value (e.g., a slider for 0.5, a color
+  picker for Vector3). The substrate uses this as the Default.
+- Connected — UI shows the live value flowing through the wire. The literal
+  value is ignored.
+
+## Connection
+
+A pure transport link between an Output and an Input. It is a separate object
+in the Graph, keeping wiring decoupled from data.
+
+Fields:
+
+- **ID** — unique identifier for the connection
+- **Source** — reference to Node ID + Output Socket ID
+- **Destination** — reference to Node ID + Input Socket ID
+
+Rules:
+
+- Implicit conversion — allowed if lossless (e.g., int to float).
+- Silent conversions — across different structures (Vector3 to Scalar) are
+  forbidden. Requires an explicit math/extraction node.
+
+Connection is a SEPARATE OBJECT in the Graph, not a field on Socket. Socket just
+has its current value.
+
+## Graph
+
+The mathematical canvas. A container for Nodes and Connections.
+
+Fields:
+
+- **Nodes[]** — the list of instantiated nodes
+- **Connections[]** — the list of wires linking them
+- **Baked State** — boolean or enum. Is this graph currently being edited
+  (interpreted/dynamic), or has it been compiled/baked for zero-latency runtime?
+
+## Intention
+
+A packaged, reusable Graph. This is what the operator interacts with on the
+Surface. It hides the Substrate graph and only exposes what the creator wants
+exposed.
+
+Fields:
+
+- **Name** — e.g., `Diagonal Red Sweep`
+- **Graph** — the underlying node network
+- **Exposed Inputs[]** — specific Input Sockets from deep inside the graph that
+  are routed to the Surface (e.g., the Period of a buried Phase node becomes
+  `Sweep Speed`).
+- **Metadata** — tags, categories, author (for the library browser)
+
+## Nested Intention / Subpatch
+
+An Intention used inside another Intention's Graph.
+
+Rules:
+
+- **Behavior** — To the parent graph, it looks and acts exactly like a single Node.
+- **Interface** — The Exposed Inputs of the Intention become the Input Sockets
+  of this Node.
+- **Escape Hatch** — Allows the user to crack it open, revealing the nested Graph.
+- **Bake-time** — The boundary dissolves. The substrate flattens the nested graph
+  into one optimized runtime block.
+
+## Fixture (The Probe)
+
+Not a profile, not a DMX footprint. Just a point in space that samples the math.
+
+Fields:
+
+- **ID** — UUID
+- **Position** — Vector3 (X, Y, Z coordinates in the 4D volume)
+- **Traits[]** — What the fixture is physically capable of (e.g., [Dimmer, Pan,
+  Tilt, Color_RGB]). Used by the Spatial Operator to know what data to pull from
+  the field.
+
+## Spatial Operator (Spatial Fixture Driver)
+
+The final node type in a positional chain. It bridges the pure math of the
+Substrate to the physical reality of the Fixtures.
+
+Fields:
+
+- **Inputs** — Expects a spatial stream (math evaluated over X,Y,Z).
+- **Behavior** — Looks at the active Spatial Bounding Mask (e.g., "Only fixtures
+  in the Back Truss"). For every Fixture in that mask, it evaluates the math at
+  that Fixture's specific Vector3 position.
+- **Outputs** — Frame-rate streams mapped to generic traits (Dimmer = 0.8,
+  Color = [0.1, 0.5, 0.9]).

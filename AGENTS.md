@@ -15,24 +15,42 @@ experimentation, and preserving insight, not for premature production process.
 
 ## Development Priorities
 
-- Keep the NixOS dev environment reliable first.
+- Keep both Windows and NixOS builds healthy.
 - Preserve a working prototype baseline before adding new features.
 - Prefer small, testable steps that answer one design question at a time.
 - Avoid building later phases into Phase 1 code.
 
 ## Canonical Workflow
 
-Use the Nix shell as the primary entrypoint:
+### Windows
+
+```powershell
+cmake --preset windows-debug
+cmake --build --preset windows-debug
+```
+
+Run tests and experiments from:
+
+```text
+cmake-build/windows/bin/Debug/
+```
+
+### NixOS
 
 ```bash
 nix-shell
 lit_configure
 lit_build
 lit_test
-lit_view
 ```
 
-The shell is responsible for the runtime linker environment needed by SDL,
+Run tests and experiments from:
+
+```text
+cmake-build/linux/bin/
+```
+
+The Nix shell is responsible for the runtime linker environment needed by SDL,
 OpenGL, and the GUI prototype on NixOS.
 
 ## Code Guidance
@@ -46,13 +64,23 @@ OpenGL, and the GUI prototype on NixOS.
 
 Before calling a baseline healthy, verify:
 
-1. Configure succeeds from `nix-shell`.
-2. The build succeeds from a clean build directory.
-3. `test_substrate` passes.
-4. `lit_view` starts successfully on the current NixOS desktop session.
+1. `test_substrate` passes.
+2. Experiments 01–06 compile and run.
+3. The current platform’s build workflow succeeds.
+4. No obsolete UI targets (`lit_view`, `lit_playground`) are referenced outside
+   `archive/`.
 
 ## Editing Boundaries
 
 - Do not delete or rewrite design docs casually; they are accumulated thinking.
-- Do not treat prototype code as disposable unless the docs explicitly say the insight has been preserved elsewhere.
+- Do not treat prototype code as disposable unless the docs explicitly say the
+  insight has been preserved elsewhere.
 - If you introduce a new workflow assumption, document it in `README.md`.
+
+Then commit everything:
+
+```powershell
+git add README.md AGENTS.md CMakeLists.txt CMakePresets.json
+git commit -m "Update docs and CMake for Windows/NixOS support and experiments 01-06"
+git push
+```
