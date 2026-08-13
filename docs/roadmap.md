@@ -62,7 +62,7 @@ results to their own traits.
 
 ## Phase 1 — Shader-field research
 
-**Status:** complete via experiments 01–06.
+**Status:** baseline established through experiments 01–08; ongoing.
 
 ### What got built
 
@@ -72,7 +72,8 @@ results to their own traits.
 - **Experiment 04** — visual fixture overlay.
 - **Experiment 05** — connected field sampling.
 - **Experiment 06** — diagonal red sweep with stateful GPU decay.
-- **Experiment 07** — true 3D scalar field sampled by fixtures.
+- **Experiment 07** — true 3D scalar field slices.
+- **Experiment 08** — 3D fixture preview with moving radial energy field.
 
 ### What these proved
 

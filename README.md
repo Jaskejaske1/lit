@@ -158,7 +158,8 @@ cmake-build/linux/bin/
 - `experiment_04` — visual fixture overlay
 - `experiment_05` — connected field sampling
 - `experiment_06` — diagonal red sweep with stateful GPU decay
-- `experiment_07` — true 3D scalar field sampled by fixtures
+- `experiment_07` — true 3D scalar field, slice visualisation
+- `experiment_08` — 3D fixture preview with moving radial energy field
 
 Run an experiment from its build output directory, for example:
 
