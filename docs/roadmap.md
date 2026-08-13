@@ -72,6 +72,7 @@ results to their own traits.
 - **Experiment 04** — visual fixture overlay.
 - **Experiment 05** — connected field sampling.
 - **Experiment 06** — diagonal red sweep with stateful GPU decay.
+- **Experiment 07** — true 3D scalar field sampled by fixtures.
 
 ### What these proved
 

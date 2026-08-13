@@ -130,9 +130,17 @@ add_executable(experiment_06
 )
 target_link_libraries(experiment_06 PRIVATE SDL3::SDL3 gl3w_loader)
 
+# ============================================================================
+# Experiment 07 – True 3D scalar field
+# ============================================================================
+add_executable(experiment_07
+    src/experiments/07_true_3d_field/main.cpp
+)
+target_link_libraries(experiment_07 PRIVATE SDL3::SDL3 gl3w_loader)
+
 # On Windows, SDL_main.h renames main to SDL_main unless handled.
 # Define SDL_MAIN_HANDLED for the small experiment executables.
 foreach(exp experiment_01 experiment_02 experiment_03
-           experiment_04 experiment_05 experiment_06)
+           experiment_04 experiment_05 experiment_06 experiment_07)
     target_compile_definitions(${exp} PRIVATE SDL_MAIN_HANDLED)
 endforeach()
