@@ -62,7 +62,7 @@ results to their own traits.
 
 ## Phase 1 — Shader-field research
 
-**Status:** baseline established through experiments 01–08; ongoing.
+**Status:** baseline established through experiments 01–09; ongoing.
 
 ### What got built
 
@@ -74,6 +74,7 @@ results to their own traits.
 - **Experiment 06** — diagonal red sweep with stateful GPU decay.
 - **Experiment 07** — true 3D scalar field slices.
 - **Experiment 08** — 3D fixture preview with moving radial energy field.
+- **Experiment 09** — Raylib field manipulator; revealed the need to separate the declarative engine from the imperative operator surface.
 
 ### What these proved
 
@@ -83,6 +84,8 @@ results to their own traits.
 - The “Fixtures as Pixels” concept works end-to-end.
 - Stateful nodes (decay) can be implemented as extra SSBO state buffers.
 - The visual output is a first usable field-preview slice.
+
+Next: realistic rig + imperative cue layer before substrate-to-shader work.
 
 ## Phase 2 — Substrate-to-shader compilation
 

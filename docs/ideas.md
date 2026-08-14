@@ -311,6 +311,33 @@ This is the zero-latency, scalable foundation for a modern busking tool.
   the operator shapes continuously, no GO button.
 - This is how you get reactivity to song structure without scripting it.
 
+## Imperative surface on declarative engine
+
+The field engine is declarative: fixtures sample continuous fields in space.
+
+But the operator surface must be imperative:
+
+- Buttons
+- Faders
+- Flash states
+- Immediate looks
+
+Examples:
+
+- “Blinders NOW”
+- “Strobes NOW”
+- “Sweep upstage”
+
+The field engine should never be exposed directly as the UI. If the operator
+sees a moving cloud, the tool feels like a VJ tool, not a lighting console.
+
+Therefore:
+
+- Substrate / field engine = declarative layer.
+- Operation / busking surface = imperative layer.
+- The surface maps instant commands to field parameters.
+- The operator thinks in lighting language, not field language.
+
 ## Decay node primitive
 
 - Exponential decay: `I(x, t) = exp(-dt / tau)` where `dt` is time since the

@@ -79,6 +79,16 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(gl3w)
 
+# Raylib for viewport experiments
+
+FetchContent_Declare(
+    raylib
+    GIT_REPOSITORY https://github.com/raysan5/raylib.git
+    GIT_TAG        5.5
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(raylib)
+
 add_library(gl3w_loader STATIC ${gl3w_BINARY_DIR}/src/gl3w.c)
 target_link_libraries(gl3w_loader PUBLIC gl3w)
 
@@ -146,9 +156,18 @@ add_executable(experiment_08
 )
 target_link_libraries(experiment_08 PRIVATE SDL3::SDL3 gl3w_loader)
 
+# ============================================================================
+# Experiment 09 – Field Manipulator
+# ============================================================================
+add_executable(experiment_09
+    src/experiments/09_field_manipulator/main.cpp
+)
+target_link_libraries(experiment_09 PRIVATE raylib)
+
 # On Windows, SDL_main.h renames main to SDL_main unless handled.
 # Define SDL_MAIN_HANDLED for the small experiment executables.
 foreach(exp experiment_01 experiment_02 experiment_03
-           experiment_04 experiment_05 experiment_06 experiment_07 experiment_08)
+           experiment_04 experiment_05 experiment_06
+           experiment_07 experiment_08)
     target_compile_definitions(${exp} PRIVATE SDL_MAIN_HANDLED)
 endforeach()
